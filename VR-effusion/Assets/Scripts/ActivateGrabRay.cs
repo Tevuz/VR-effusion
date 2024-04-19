@@ -9,8 +9,8 @@ public class ActivateGrabRay : MonoBehaviour
     public GameObject rightGrabRay;
     public XRDirectInteractor rightDirectGrab;
 
-    public GameObject leftGrabRay;
-    public XRDirectInteractor leftDirectGrab;
+    //public GameObject leftGrabRay;
+    //public XRDirectInteractor leftDirectGrab;
 
 
 
@@ -24,7 +24,7 @@ public class ActivateGrabRay : MonoBehaviour
     void Update()
     {
         rightGrabRay.SetActive(rightDirectGrab.interactablesSelected.Count == 0);
-        leftGrabRay.SetActive(leftDirectGrab.interactablesSelected.Count == 0);
+      //  leftGrabRay.SetActive(leftDirectGrab.interactablesSelected.Count == 0);
 
     }
 }

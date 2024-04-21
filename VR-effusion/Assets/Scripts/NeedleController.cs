@@ -10,7 +10,16 @@ public class NeedleController : MonoBehaviour
         {
             // Freeze position in X and Z directions
             Rigidbody rb = GetComponent<Rigidbody>();
-            rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezePositionZ;
+            rb.constraints = RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionY;
+
+            float rightTrigger = Input.GetAxis("PrimaryTrigger");
+
+            //Trigger is down -> freeze positions -> extract liquid 
+            if (rightTrigger > 0.5f)
+            {
+                rb.constraints = RigidbodyConstraints.FreezeAll;
+                Debug.Log("Høyre trigger er presset ned!");
+            }
         }
         else
         {

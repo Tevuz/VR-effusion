@@ -379,7 +379,7 @@ MonoBehaviour:
   m_SnapToColliderVolume: 1
   m_ReinitializeDynamicAttachEverySingleGrab: 1
   m_AttachEaseInTime: 0.15
-  m_MovementType: 2
+  m_MovementType: 0
   m_VelocityDamping: 1
   m_VelocityScale: 1
   m_AngularVelocityDamping: 1
@@ -396,7 +396,7 @@ MonoBehaviour:
   m_SmoothScale: 0
   m_SmoothScaleAmount: 8
   m_TightenScale: 0.1
-  m_ThrowOnDetach: 1
+  m_ThrowOnDetach: 0
   m_ThrowSmoothingDuration: 0.25
   m_ThrowSmoothingCurve:
     serializedVersion: 2
@@ -750,11 +750,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1214707362370793939, guid: 7e505d787e1c09e46864eb224cc842f8, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 1.057
+      value: 1.0543
       objectReference: {fileID: 0}
     - target: {fileID: 1214707362370793939, guid: 7e505d787e1c09e46864eb224cc842f8, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0.416
+      value: 0.4141
       objectReference: {fileID: 0}
     - target: {fileID: 1214707362370793939, guid: 7e505d787e1c09e46864eb224cc842f8, type: 3}
       propertyPath: m_LocalRotation.w
@@ -859,6 +859,15 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 5233714434138711568, guid: 7e505d787e1c09e46864eb224cc842f8, type: 3}
       insertIndex: -1
       addedObject: {fileID: 176133656}
+    - targetCorrespondingSourceObject: {fileID: 5233714434138711568, guid: 7e505d787e1c09e46864eb224cc842f8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 176133659}
+    - targetCorrespondingSourceObject: {fileID: 5233714434138711568, guid: 7e505d787e1c09e46864eb224cc842f8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 176133658}
+    - targetCorrespondingSourceObject: {fileID: 5233714434138711568, guid: 7e505d787e1c09e46864eb224cc842f8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 176133657}
   m_SourcePrefab: {fileID: 100100000, guid: 7e505d787e1c09e46864eb224cc842f8, type: 3}
 --- !u!1 &176133651 stripped
 GameObject:
@@ -1065,8 +1074,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.032510865, y: 0.17126496, z: 0.111826904}
-  m_Center: {x: 0.0000030435622, y: -0.038320333, z: -0.0029686913}
+  m_Size: {x: 0.032510865, y: 0.13855547, z: 0.116158925}
+  m_Center: {x: 0.0000030575404, y: -0.054675657, z: -0.00513418}
 --- !u!4 &176133655 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1214707362370793939, guid: 7e505d787e1c09e46864eb224cc842f8, type: 3}
@@ -1087,6 +1096,75 @@ MonoBehaviour:
   poseTransitionDuration: 0.2
   rightHandPose: {fileID: 4967273411843696832}
   leftHandPose: {fileID: 1883038556}
+--- !u!136 &176133657
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 176133651}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.0212627
+  m_Height: 0.046304613
+  m_Direction: 2
+  m_Center: {x: 0.0000000067520327, y: 0.024, z: 0.02}
+--- !u!136 &176133658
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 176133651}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.0212627
+  m_Height: 0.046304613
+  m_Direction: 2
+  m_Center: {x: 0.0000000067520327, y: 0.01, z: 0.035}
+--- !u!136 &176133659
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 176133651}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.021262702
+  m_Height: 0.06885776
+  m_Direction: 2
+  m_Center: {x: -0.0000000046161492, y: 0.029, z: -0.010817761}
 --- !u!1 &180560786
 GameObject:
   m_ObjectHideFlags: 0
@@ -7318,7 +7396,7 @@ MonoBehaviour:
   m_SnapToColliderVolume: 1
   m_ReinitializeDynamicAttachEverySingleGrab: 1
   m_AttachEaseInTime: 0.15
-  m_MovementType: 2
+  m_MovementType: 0
   m_VelocityDamping: 1
   m_VelocityScale: 1
   m_AngularVelocityDamping: 1
@@ -7335,7 +7413,7 @@ MonoBehaviour:
   m_SmoothScale: 0
   m_SmoothScaleAmount: 8
   m_TightenScale: 0.1
-  m_ThrowOnDetach: 1
+  m_ThrowOnDetach: 0
   m_ThrowSmoothingDuration: 0.25
   m_ThrowSmoothingCurve:
     serializedVersion: 2

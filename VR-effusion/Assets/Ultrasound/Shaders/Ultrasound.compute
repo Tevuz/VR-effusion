@@ -1,0 +1,350 @@
+#pragma kernel Main_pass0
+#pragma kernel MainSimulate
+#pragma kernel MainPost
+#pragma kernel MainNormal
+
+
+uint WIDTH;
+uint HEIGHT;
+uint FRAME;
+
+static uint SAMPLES = 10;
+
+RWTexture2D<float1> buffer_pass0;
+RWTexture2D<float1> buffer_pass1;
+RWTexture2D<float4> buffer_output;
+RWTexture2D<float3> buffer_normal;
+
+static struct Rand {
+    uint seed;
+    uint state;
+} rand;
+
+uint Rand_Hash(uint m, uint seed) {
+    m *= 0xB5297A4Du;
+    m += seed;
+    m ^= (m >> 8);
+    m += 0x68E31DA4u;
+    m ^= (m << 8);
+    m *= 0x1B56C4E9u;
+    m ^= (m >> 8);
+    return m;
+}
+
+uint Rand_Next() {
+    rand.state = Rand_Hash(rand.state, rand.seed);
+    return rand.state;
+}
+
+float toFloat(uint m) {
+    m &= 0x007FFFFFu;
+    m |= 0x3F800000u;
+    return asfloat(m) - 1.0;
+}
+
+float Rand_Float() {
+    return toFloat(Rand_Next());
+}
+
+float2 toFloat2(float f) {
+    float2 f2 = float2(0.0, 0.0);
+    sincos(f * 6.2832, f2.x, f2.y);
+    return f2;
+}
+
+float2 Rand_Float2() {
+    return toFloat2(Rand_Float());
+}
+
+const float PERLIN_SEED = 0;
+
+float Rand_Noise(float2 id, uint seed) {
+    float2 p = floor(id);
+    float2 w = frac(id);
+
+    float2 u = w * w * w * (w * (w * 6.0 - 15.0) + 10.0);
+
+    seed = Rand_Hash(seed, PERLIN_SEED);
+    const uint seedX = Rand_Hash(0, seed);
+    const uint seedY = Rand_Hash(1, seed);
+
+    uint hx0 = Rand_Hash(asuint(p.x    ), seedX);
+    uint hx1 = Rand_Hash(asuint(p.x + 1), seedX);
+    uint hy0 = Rand_Hash(asuint(p.y    ), seedY);
+    uint hy1 = Rand_Hash(asuint(p.y + 1), seedY);
+
+    /*float2 g00 = toFloat2(toFloat(Rand_Hash(hx0 ^ hy0, seed)));
+    float2 g10 = toFloat2(toFloat(Rand_Hash(hx1 ^ hy0, seed)));
+    float2 g01 = toFloat2(toFloat(Rand_Hash(hx0 ^ hy1, seed)));
+    float2 g11 = toFloat2(toFloat(Rand_Hash(hx1 ^ hy1, seed)));*/
+
+    #define toBox(a,b) float2(toFloat(Rand_Hash(a, b)), toFloat(Rand_Hash(b, a)))
+    float2 g00 = 1.0 - 2.0 * toBox(hx0, hy0);
+    float2 g10 = 1.0 - 2.0 * toBox(hx1, hy0);
+    float2 g01 = 1.0 - 2.0 * toBox(hx0, hy1);
+    float2 g11 = 1.0 - 2.0 * toBox(hx1, hy1);
+
+    float v00 = dot(g00, w - float2(0.0, 0.0));
+    float v10 = dot(g10, w - float2(1.0, 0.0));
+    float v01 = dot(g01, w - float2(0.0, 1.0));
+    float v11 = dot(g11, w - float2(1.0, 1.0));
+
+    //return 0.5 + 0.5 * dot(lerp(float2(v00, v01), float2(v10, v11), u.x), float2(1.0 - u.y, u.y));
+    return v00 + u.x*(v10-v00) + u.y*(v01-v00) + u.x*u.y*(v00-v10-v01+v11);
+}
+
+float Rand_Noise(float2 id, uint octaves, uint seed) {
+    const float G = exp2(-1);
+    float t = 0.0;
+    float w = 1.0;
+    for (int i = 0; i < octaves; i++) {
+        t += w * Rand_Noise(id, Rand_Hash(i, seed));
+        id *= 2.0;
+        w *= G;
+    }
+    return t;
+}
+
+void Rand_Init(uint3 id, uint seed) {
+    rand.seed = seed;
+    rand.seed = Rand_Hash(id.z, rand.seed);
+    rand.seed = Rand_Hash(id.x, rand.seed);
+    rand.seed = Rand_Hash(id.y, rand.seed);
+}
+
+float ISO0(float2 pos) {
+    float iso = 1.0;
+    //iso += Rand_Noise(pos * float2(1.0, 85.0), 3, 0) * 0.03;
+    //iso += Rand_Noise(pos * float2(15.0, 65.0), 3, 1) * 0.03;
+    //iso = lerp(iso, 1.3, smoothstep(0.0, 0.08, 2.4 - length(pos - float2(0.7, 2.47))));
+    iso += Rand_Noise(pos * float2(165.0, 165.0), 1, FRAME) * 0.05;
+    iso += Rand_Float() * 0.03;
+    //iso = lerp(iso, 1.7, smoothstep(-0.1, 0.01, 1.3 - length(pos - float2(0.2, 1.6))));
+    //iso = lerp(0.0, iso, smoothstep(0.003, 0.0, 0.4 - length(pos - float2(0.65, 0.55))));
+    //iso = lerp(iso, 2.0, smoothstep(0.0, 0.003, 1.3 - length(pos - float2(0.2, 1.6))));
+    //iso = lerp(iso, 2.0, smoothstep(0.0, 0.003, 0.2 - length(pos - float2(0.9, 0.3))));
+    return iso;
+}
+
+float ISO1(float2 pos) {
+    float iso = 0.5;
+
+    float2 p = abs(pos - float2(0.5, 0.5));
+    //iso = max(iso, 0.5 * smoothstep(-0.05, 0.05, 0.4 - length(p - float2(0.0, 0.0))));
+    iso = max(iso, .0 * smoothstep(-0.15, 0.15, 0.35 - length(p - float2(0.0, 0.0))));
+    //iso += Rand_Float() * 0.2;
+
+    //iso += Rand_Float() * 0.01;
+    //iso *= 1.0 - Rand_Float() * 0.01;
+
+    return iso;
+}
+
+[numthreads(8,8,1)]
+void Main_pass0(uint3 id : SV_DispatchThreadID) {
+    Rand_Init(id, FRAME);
+
+    float2 pos = float2(id.xy) / float2(WIDTH, HEIGHT);
+    buffer_pass0[id.xy].x += ISO0(pos);
+    /*if (id.y < 5) {
+        buffer_pass0[id.xy].x = 1.0;
+    } else {
+    }*/
+}
+
+
+float Reflectance(float2 dir, float2 nor, float d0, float d1) {
+    if (dot(nor, nor) < 0.99)
+        return 0.0;
+    float n = d0 / d1;
+
+    float cosI = dot(nor, -dir);
+    float sinT2 = n * n * (1.0 - cosI * cosI);
+    if (sinT2 > 1.0)
+        return 1.0;
+
+    float cosT = sqrt(1.0 - sinT2);
+    float r0 = (d0 * cosI - d1 * cosT) / (d0 * cosI + d1 * cosT);
+    float r1 = (d1 * cosI - d0 * cosT) / (d1 * cosI + d0 * cosT);
+
+    return (r0 * r0 + r1 * r1) * 0.5;
+}
+
+void DDA(in int2 src, in float2 pos, in float2 dir, out int2 step, out float delta) {
+    float2 rem = (pos - src);
+    float2 dist = (dir < 0.0 ? rem : 1.0 - rem) / max(1e-20, abs(dir));
+
+    float2 mask = float2(dist.x < dist.y, dist.x >= dist.y);
+    step = dir < 0.0 ? -mask : mask;
+
+    delta = min(dist.x, dist.y);
+}
+
+void Raytrace(uint3 id) {
+    const float2 origin = float2(WIDTH * 0.5, -300.0);
+
+    int2 src = uint2(id.x, 0.0);
+    float2 dst = float2(id.x + 0.5, 0.0);
+
+    float d = 0.0;
+    float2 pos = float2(id.x + Rand_Float(), 0.0);
+    float2 dir = float2(0.0, 1.0);
+    float2 nor = float2(0.0, 1.0);
+    float col = 0.0;
+
+    float att = 1.0;
+
+    float d0 = 0.0;
+    float d1 = buffer_pass0[src];
+    float dd = d1;
+
+    uint y = 0;
+    do {
+        int2 step;
+        float delta;
+        DDA(src, pos, dir, step, delta);
+
+        src += step;
+        pos += delta * dir;
+        dst.y += delta;
+
+        col = 0.0;
+
+        if (src.y < 0.0) {
+            src -= step;
+            step = -step;
+            dir = reflect(dir, step);
+        }
+        if (any(src < 0.0) || any(src >= float2(WIDTH, HEIGHT)))
+            break;
+
+        /* normal */ {
+            float2 pf = frac(pos - src);
+            float nf = max(pf.x, pf.y);
+            nor = lerp(buffer_normal[src].xy, buffer_normal[src + abs(step.yx)].xy, nf);
+            if (dot(nor, nor) > 0.01) {
+                nor = normalize(nor);
+            } else {
+                nor = -step;
+            }
+        }
+
+        d0 = d1;
+        d1 = buffer_pass0[src];
+
+        float r = Reflectance(dir, nor, d1 + 1.0, d0 + 1.0);
+        if (Rand_Float() < 0.05 && Rand_Float() < r) {
+            //buffer_output[src] += float4(0.0, delta, 0.0, 0.0);
+            float2 _dir = normalize(reflect(dir, nor) + Rand_Float2() * Rand_Float() * 0.25);
+            float n = (d1 + 1.0) / (d0 + 1.0);
+            if (dot(_dir, -step) < 0.0) {
+                src -= step;
+                d1 = d0;
+            }
+            float a = abs(dot(dir, _dir));
+            col = pow(a, 15.0);
+
+            att *= a * a;
+            dir = _dir;
+
+
+        } else {
+            float n = (d1 + 1.0) / (d0 + 1.0);
+            //col = max(n - 1.0, 1.0 / n - 1.0);
+            //col = max(0.0, n - 1.0) * d1;
+            float2 _dir = normalize(dir - refract(dir, nor, 1.0 / n) * 0.5 + Rand_Float2() * Rand_Float() * 0.05);
+
+            col = smoothstep(0.0, 1.0, abs(dot(-dir, nor))) * max(0.0, n - 1.0);
+
+            att *= n;
+            float a = abs(dot(dir, _dir));
+            att *= a * a;
+            dir = _dir;
+        }
+
+        col += (d1 - dd);
+        dd = lerp(d1, dd, 0.75);
+
+
+
+        float tt = (FRAME * 4) % (HEIGHT * 2);
+        float s = smoothstep(4.0, 0.0, tt - d) * smoothstep(0.0, 0.0, tt - d);
+        buffer_output[src] += float4(delta * 0.05, 0.0, 0.0, 0.0);
+        buffer_output[src] += float4(0.0, 0.0, s, 0.0);
+
+        buffer_pass1[dst] += att * delta * col;
+
+        d += delta;
+        att -= delta * 0.0012;
+        if (att < 0.001)
+            break;
+
+
+    } while (++y < HEIGHT * 2);
+}
+
+[numthreads(4, 1, 1)]
+void MainSimulate(uint3 id : SV_DispatchThreadID) {
+    Rand_Init(id, FRAME);
+
+    for (uint i = 0; i < SAMPLES; i++) {
+        Raytrace(id);
+    }
+}
+
+[numthreads(8,8,1)]
+void MainPost(uint3 id : SV_DispatchThreadID) {
+    int mode = 0;
+
+    if (mode == 0) {
+        float3 col = buffer_pass1[uint2(id.x, HEIGHT - 1 - id.y)].r;
+        buffer_output[id.xy] = float4(1.0 - exp(-col * 4.15 / float(SAMPLES)), 1.0);
+    } else if (mode == 1) {
+        float3 col = buffer_output[id.xy].rgb;
+        col.rg += col.b;
+        buffer_output[id.xy] = float4(1.0 - exp(-col * 0.5 / float(SAMPLES)), 1.0);
+    } else {
+        //float c = smoothstep(-0.8, 1.0, Rand_Noise(id.xy * 0.015, 3, 0));
+        //buffer_output[id.xy] = float4(c, c, c, 1.0);
+        buffer_output[id.xy] = float4(buffer_normal[id.xy].xyz * 0.5 + 0.5, 0.0);
+    }
+}
+
+float getValue(int2 id) {
+    return buffer_pass0[clamp(id, 0, int2(WIDTH, HEIGHT) - 1)];
+}
+
+[numthreads(8,8,1)]
+void MainNormal(uint3 id : SV_DispatchThreadID) {
+    float3 nor = float3(0.0, 0.0, 1.0);
+    const int SIZE = 3;
+    for (int y = 1-SIZE; y <= SIZE; y++) {
+        for (int x = 1-SIZE; x <= SIZE; x++) {
+            float2 c = float2(x, y) - 0.5;
+            nor.xy += getValue(int2(id.x + x, id.y + y)) * sign(c) * exp(-c.x * c.x * 0.75) * exp(-c.y * c.y * 0.75);
+        }
+    }
+    /*nor.xy += getValue(int2(id.x - 1, id.y - 1)) * float2(-1, -1);
+    nor.xy += getValue(int2(id.x + 0, id.y - 1)) * float2(-1, -1);
+    nor.xy += getValue(int2(id.x + 1, id.y - 1)) * float2(+1, -1);
+    nor.xy += getValue(int2(id.x + 2, id.y - 1)) * float2(+1, -1);
+
+    nor.xy += getValue(int2(id.x - 1, id.y + 0)) * float2(-1, -1);
+    nor.xy += getValue(int2(id.x + 0, id.y + 0)) * float2(-1, -1);
+    nor.xy += getValue(int2(id.x + 1, id.y + 0)) * float2(+1, -1);
+    nor.xy += getValue(int2(id.x + 2, id.y + 0)) * float2(+1, -1);
+
+    nor.xy += getValue(int2(id.x - 1, id.y + 1)) * float2(-1, +1);
+    nor.xy += getValue(int2(id.x + 0, id.y + 1)) * float2(-1, +1);
+    nor.xy += getValue(int2(id.x + 1, id.y + 1)) * float2(+1, +1);
+    nor.xy += getValue(int2(id.x + 2, id.y + 1)) * float2(+1, +1);
+
+    nor.xy += getValue(int2(id.x - 1, id.y + 2)) * float2(-1, +1);
+    nor.xy += getValue(int2(id.x + 0, id.y + 2)) * float2(-1, +1);
+    nor.xy += getValue(int2(id.x + 1, id.y + 2)) * float2(+1, +1);
+    nor.xy += getValue(int2(id.x + 2, id.y + 2)) * float2(+1, +1);*/
+
+    nor = normalize(nor);
+
+    buffer_normal[id.xy] = nor;
+}

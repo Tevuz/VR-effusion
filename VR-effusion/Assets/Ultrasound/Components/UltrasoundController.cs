@@ -11,9 +11,10 @@ namespace Ultrasound
 
         [SerializeField] internal float _width;
         [SerializeField] internal float _depth;
+        [SerializeField, Range(0, 60)] internal float _ARC;
 
-        internal Matrix4x4 _projection = Matrix4x4.identity;
-        internal Matrix4x4 _view => transform.worldToLocalMatrix;
+        [SerializeField] internal Matrix4x4 _projection = Matrix4x4.identity;
+        [SerializeField] internal Matrix4x4 _view = Matrix4x4.identity;
 
         internal Mesh _mesh;
         internal GraphicsBuffer _vertices;
@@ -23,23 +24,22 @@ namespace Ultrasound
             float w = _width * 0.5f;
             _projection = Matrix4x4.Ortho(-w, w, -w, w, 0.0f, -_depth);
 
+
             InitMesh();
             Render();
         }
 
         // Update is called once per frame
-        void Update()
-        {
-        
+        void Update() {
+            _view = transform.worldToLocalMatrix;
         }
 
         private void InitMesh() {
             _vertices?.Dispose();
             _indices?.Dispose();
             //_mesh = transform.GetChild(0).gameObject.GetComponent<MeshFilter>().mesh;
-            _mesh = GetComponent<MeshFilter>().sharedMesh;
-            if (_mesh is null)
-                _mesh = new Mesh();
+            MeshFilter filter = GetComponent<MeshFilter>();
+            _mesh = filter.mesh = new Mesh();
             _mesh.name = "Frustum";
 
             _mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
@@ -47,10 +47,10 @@ namespace Ultrasound
 
             var a_position = new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3);
 
-            _mesh.SetVertexBufferParams(8, a_position);
+            _mesh.SetVertexBufferParams(4, a_position);
             _mesh.SetIndexBufferParams(8, IndexFormat.UInt32);
 
-            _mesh.SetSubMesh(0, new SubMeshDescriptor(0, 4, MeshTopology.Lines), MeshUpdateFlags.DontRecalculateBounds);
+            _mesh.SetSubMesh(0, new SubMeshDescriptor(0, 8, MeshTopology.Lines), MeshUpdateFlags.DontRecalculateBounds);
 
             _vertices = _mesh.GetVertexBuffer(0);
             _indices = _mesh.GetIndexBuffer();

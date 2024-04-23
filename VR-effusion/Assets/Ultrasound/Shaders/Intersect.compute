@@ -33,10 +33,15 @@ float3 readVertex(uint i) {
     float3 r = asfloat(_inVertices.Load3(i * _inStride));
     return r;
 }
-
 RWStructuredBuffer<uint> _counter;
 RWByteAddressBuffer _outVertices;
 RWTexture2D<float4> _outBuffer;
+uint _outStride;
+
+void writeVertex(uint i, float3 v) {
+    _outVertices.Store3(i * _outStride, asuint(v));
+}
+
 
 float4x4 u_matrix;
 float4x4 u_inverse;
@@ -46,14 +51,14 @@ float u_offset;
 float3 clip(float3 f) {
     float3 a = abs(f);
     float m = max(max(a.x, a.y), a.z);
-    //if (m > 1.0)
-    //    f /= m;
+    if (m > 1.0)
+        f /= m;
     return f;
 }
 
 [numthreads(64,1,1)]
 void Main(uint3 id : SV_DispatchThreadID) {
-    if (id.x * 3 + 3 >= _inCount)
+    if (id.x * 3 >= _inCount)
         return;
 
     uint3 i = readTriangle(id.x);
@@ -62,66 +67,80 @@ void Main(uint3 id : SV_DispatchThreadID) {
     float3 p1 = readVertex(i.y);
     float3 p2 = readVertex(i.z);
 
+//#define DEBUG
+#ifdef DEBUG
+
+    //p0 = float3(id.x / float(MAX_VERTICES_OUT), 0.0, 0.0);
+    //p1 = float3(id.x / float(MAX_VERTICES_OUT), 1.0, 0.0);
+
     p0 = mul(u_matrix, float4(p0, 1.0)).xyz;
     p1 = mul(u_matrix, float4(p1, 1.0)).xyz;
-    p2 = mul(u_matrix, float4(p2, 1.0)).xyz;
+
+    if (any(abs(p0) > 1.0))
+        return;
+    if (any(abs(p1) > 1.0))
+        return;
 
     uint c = 2 * _counter.IncrementCounter();
     if (c >= MAX_VERTICES_OUT)
         return;
 
-    _outVertices.Store3((c + 0) * SIZEOF_FLOAT3, asuint(p0));
-    _outVertices.Store3((c + 1) * SIZEOF_FLOAT3, asuint(p1));
+    //p0 = mul(u_inverse, float4(p0, 0.0)).xyz;
+    //p1 = mul(u_inverse, float4(p1, 0.0)).xyz;
 
-//    float3 v0 = clip(mul(u_matrix, float4(p0, 1.0)).xyz);
-//    float3 v1 = clip(mul(u_matrix, float4(p1, 1.0)).xyz);
-//    float3 v2 = clip(mul(u_matrix, float4(p2, 1.0)).xyz);
-//
-//    float d0 = dot(v0, u_plane) - u_offset;
-//    float d1 = dot(v1, u_plane) - u_offset;
-//    float d2 = dot(v2, u_plane) - u_offset;
-//
-//    float l01 = -(d0) / dot(v1 - v0, u_plane);
-//    float l12 = -(d1) / dot(v2 - v1, u_plane);
-//    float l20 = -(d2) / dot(v0 - v2, u_plane);
-//
-//    bool i0 = (0.0 < l01 && l01 < 1.0);
-//    bool i1 = (0.0 < l12 && l12 < 1.0);
-//    bool i2 = (0.0 < l20 && l20 < 1.0);
-//
-//    float3 w0 = 0.0, w1 = 0.0;
-//
-//    if (i0 && i1) {
-//        w0 = lerp(v0, v1, l01);
-//        w1 = lerp(v1, v2, l12);
-//    } else if (i1 && i2) {
-//        w0 = lerp(v1, v2, l12);
-//        w1 = lerp(v2, v0, l20);
-//    } else if (i2 && i0) {
-//        w0 = lerp(v2, v0, l20);
-//        w1 = lerp(v0, v1, l01);
-//    } else if (abs(d0) + abs(d1) <= 0.001) {
-//        w0 = v0;
-//        w1 = v1;
-//    } else if (abs(d1) + abs(d2) <= 0.001) {
-//        w0 = v1;
-//        w1 = v2;
-//    } else if (abs(d2) + abs(d0) <= 0.001) {
-//        w0 = v2;
-//        w1 = v0;
-//    } else {
-//        return;
-//    }
-//
-//    uint c = 2 * _counter.IncrementCounter();
-//    if (c >= MAX_VERTICES_OUT)
-//        return;
-//
-//    //w0 = mul(u_inverse, float4(w0, 1.0)).xyz;
-//    //w1 = mul(u_inverse, float4(w1, 1.0)).xyz;
-//
-//    _outVertices.Store3((c + 0) * SIZEOF_FLOAT3, asuint(w0));
-//    _outVertices.Store3((c + 1) * SIZEOF_FLOAT3, asuint(w1));
+    writeVertex(c + 0, p0);
+    writeVertex(c + 1, p1);
+#else
+    float3 v0 = clip(mul(u_matrix, float4(p0, 1.0)).xyz);
+    float3 v1 = clip(mul(u_matrix, float4(p1, 1.0)).xyz);
+    float3 v2 = clip(mul(u_matrix, float4(p2, 1.0)).xyz);
+
+    float d0 = dot(v0, u_plane) - u_offset;
+    float d1 = dot(v1, u_plane) - u_offset;
+    float d2 = dot(v2, u_plane) - u_offset;
+
+    float l01 = -(d0) / dot(v1 - v0, u_plane);
+    float l12 = -(d1) / dot(v2 - v1, u_plane);
+    float l20 = -(d2) / dot(v0 - v2, u_plane);
+
+    bool i0 = (0.0 < l01 && l01 < 1.0);
+    bool i1 = (0.0 < l12 && l12 < 1.0);
+    bool i2 = (0.0 < l20 && l20 < 1.0);
+
+    float3 w0 = 0.0, w1 = 0.0;
+
+    if (i0 && i1) {
+        w0 = lerp(v0, v1, l01);
+        w1 = lerp(v1, v2, l12);
+    } else if (i1 && i2) {
+        w0 = lerp(v1, v2, l12);
+        w1 = lerp(v2, v0, l20);
+    } else if (i2 && i0) {
+        w0 = lerp(v2, v0, l20);
+        w1 = lerp(v0, v1, l01);
+    } else if (abs(d0) + abs(d1) <= 0.001) {
+        w0 = v0;
+        w1 = v1;
+    } else if (abs(d1) + abs(d2) <= 0.001) {
+        w0 = v1;
+        w1 = v2;
+    } else if (abs(d2) + abs(d0) <= 0.001) {
+        w0 = v2;
+        w1 = v0;
+    } else {
+        return;
+    }
+
+    uint c = 2 * _counter.IncrementCounter();
+    if (c >= MAX_VERTICES_OUT)
+        return;
+
+    //w0 = mul(u_inverse, float4(w0, 1.0)).xyz;
+    //w1 = mul(u_inverse, float4(w1, 1.0)).xyz;
+
+    writeVertex(c + 0, w0);
+    writeVertex(c + 1, w1);
+#endif
 }
 
 [numthreads(64, 1, 1)]
@@ -132,7 +151,7 @@ void Init(uint3 id : SV_DispatchThreadID) {
             break;
 
         _outVertices.Store3((c + 0) * SIZEOF_FLOAT3, asuint(float3(0, 0, 0)));
-        _outVertices.Store3((c + 1) * SIZEOF_FLOAT3, asuint(float3(1, 1, 1)));
+        _outVertices.Store3((c + 1) * SIZEOF_FLOAT3, asuint(float3(0, 0, 0)));
     }
 }
 

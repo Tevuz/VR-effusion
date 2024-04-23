@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Ultrasound {
     public class UltrasoundSystem : MonoBehaviour {
 
-        internal static int MAX_VERTICES_OUT = 20000;
+        internal static int MAX_VERTICES_OUT = 100;
 
         [SerializeField] private ComputeShader _shaderSimulate;
         [SerializeField] private ComputeShader _shaderIntersect;
@@ -19,9 +19,15 @@ namespace Ultrasound {
         private UltrasoundMonitor[] _monitor;
         private UltrasoundController[] _controllers;
 
+        private Mesh _mesh;
+
         internal void Start() {
-            _simulate = new Simulate(_shaderSimulate);
-            _intersect = new Intersect(_shaderIntersect);
+            MeshFilter filter = GetComponent<MeshFilter>();
+            _mesh = filter.mesh = new Mesh();
+            _mesh.name = "Intersection";
+
+            //_simulate = new Simulate(_shaderSimulate);
+            _intersect = new Intersect(_shaderIntersect, _mesh);
 
             _targets = FindObjectsByType<UltrasoundTarget>(FindObjectsSortMode.None);
             _monitor = FindObjectsByType<UltrasoundMonitor>(FindObjectsSortMode.None);

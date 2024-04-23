@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity;
 using UnityEngine;
+using UnityEngine.Rendering;
 using static Ultrasound.Util;
 
 namespace Ultrasound{
@@ -20,9 +22,13 @@ namespace Ultrasound{
 
         internal RenderTexture result => _outBuffer;
 
+        private Mesh _mesh;
 
-        internal Intersect(ComputeShader shader, int width = 512, int height = 512) {
+
+        internal Intersect(ComputeShader shader, Mesh mesh, int width = 512, int height = 512) {
             _shader = shader;
+            _mesh = mesh;
+
             WIDTH = width;
             HEIGHT = height;
 
@@ -50,7 +56,22 @@ namespace Ultrasound{
 
         private void InitOutput() {
             _counter = new ComputeBuffer(1, 12, ComputeBufferType.Counter);
-            _outVertices = new GraphicsBuffer(GraphicsBuffer.Target.Vertex | GraphicsBuffer.Target.Raw, UltrasoundSystem.MAX_VERTICES_OUT, 12);
+
+            _mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
+            _mesh.indexBufferTarget |= GraphicsBuffer.Target.Raw;
+
+            _mesh.SetVertexBufferParams(UltrasoundSystem.MAX_VERTICES_OUT, new VertexAttributeDescriptor(VertexAttribute.Position));
+            _mesh.SetIndexBufferParams(UltrasoundSystem.MAX_VERTICES_OUT, IndexFormat.UInt32);
+
+            _mesh.SetSubMesh(0, new SubMeshDescriptor(0, UltrasoundSystem.MAX_VERTICES_OUT, MeshTopology.Lines), MeshUpdateFlags.DontRecalculateBounds);
+
+            _outVertices = _mesh.GetVertexBuffer(0);
+            _mesh.SetIndexBufferData(Enumerable.Range(0, UltrasoundSystem.MAX_VERTICES_OUT).ToList(), 0, 0, UltrasoundSystem.MAX_VERTICES_OUT, MeshUpdateFlags.DontRecalculateBounds);
+
+            Debug.Log(string.Join(", ", Enumerable.Range(0, UltrasoundSystem.MAX_VERTICES_OUT)));
+
+            //_outVertices = new GraphicsBuffer(GraphicsBuffer.Target.Vertex | GraphicsBuffer.Target.Raw, UltrasoundSystem.MAX_VERTICES_OUT, 12);
+
             _outBuffer = new RenderTexture(WIDTH, HEIGHT, 0, RenderTextureFormat.ARGBHalf) {
                 enableRandomWrite = true };
             _outBuffer.Create();
@@ -59,20 +80,24 @@ namespace Ultrasound{
         internal void Dispatch(UltrasoundController controller, UltrasoundTarget[] targets) {
             DispatchInit();
             DispatchMain(controller, targets);
-            DispatchRaster();
+            //DispatchRaster();
         }
 
         private void DispatchInit() {
-            _counter.SetCounterValue(8);
+            _counter.SetCounterValue(0);
             _shader.SetBuffer(_kernelInit.i, "_counter", _counter);
             _shader.SetBuffer(_kernelInit.i, "_outVertices", _outVertices);
             _shader.Dispatch(_kernelInit.i, 1, 1, 1);
         }
 
         private void DispatchMain(UltrasoundController controller, UltrasoundTarget[] targets) {
-            _counter.SetCounterValue(8);
+            _counter.SetCounterValue(0);
             _shader.SetBuffer(_kernelMain.i, "_counter", _counter);
             _shader.SetBuffer(_kernelMain.i, "_outVertices", _outVertices);
+            _shader.SetInt("_outStride", 12);
+
+            _shader.SetFloats("u_plane", 0.0f, 1.0f, 0.0f);
+            _shader.SetFloat("u_offset", 0.0f);
 
             foreach (var target in targets) {
                 //var meshTarget = target._target;
@@ -93,6 +118,7 @@ namespace Ultrasound{
                     continue;
 
                 Matrix4x4 matrix = controller._projection * controller._view;
+                //Matrix4x4 matrix = controller._view
                 _shader.SetMatrix("u_matrix", matrix);
                 _shader.SetMatrix("u_inverse", matrix.inverse);
 
@@ -102,11 +128,14 @@ namespace Ultrasound{
 
                 var indices = skin[0].sharedMesh.GetIndexBuffer();
 
+                Debug.Log(target);
+
                 _shader.SetBuffer(_kernelMain.i, "_inVertices", vertices);
                 _shader.SetBuffer(_kernelMain.i, "_inIndices", indices);
 
                 _shader.SetInt("_inOffset", 0);
                 _shader.SetInt("_inCount", indices.count);
+                _shader.SetInt("_inStride", vertices.stride);
                 _shader.SetFloats("_inMaterial", 1.0f, 1.0f, 1.0f);
 
                 _shader.Dispatch(_kernelMain.i, NumGroups(indices.count, _kernelMain.dx), 1, 1);
@@ -114,6 +143,10 @@ namespace Ultrasound{
                 vertices.Dispose();
                 indices.Dispose();
             }
+
+            Vector3[] data = new Vector3[UltrasoundSystem.MAX_VERTICES_OUT];
+            _outVertices.GetData(data);
+            Debug.Log($"{string.Join(", ", data.Take(12))}");
         }
 
         private void DispatchRaster() {

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Unity;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -19,10 +20,14 @@ namespace Ultrasound{
         private ComputeBuffer _counter;
         private GraphicsBuffer _outVertices;
         private RenderTexture _outBuffer;
+        private int _outStride = Marshal.SizeOf<Vector3>();
 
         internal RenderTexture result => _outBuffer;
 
         private Mesh _mesh;
+
+        internal UltrasoundController _controller { get; set; }
+        internal GameObject[] _targets { get; set; }
 
 
         internal Intersect(ComputeShader shader, Mesh mesh, int width = 512, int height = 512) {
@@ -77,9 +82,9 @@ namespace Ultrasound{
             _outBuffer.Create();
         }
 
-        internal void Dispatch(UltrasoundController controller, UltrasoundTarget[] targets) {
+        internal void Dispatch() {
             DispatchInit();
-            DispatchMain(controller, targets);
+            DispatchMain();
             //DispatchRaster();
         }
 
@@ -90,63 +95,59 @@ namespace Ultrasound{
             _shader.Dispatch(_kernelInit.i, 1, 1, 1);
         }
 
-        private void DispatchMain(UltrasoundController controller, UltrasoundTarget[] targets) {
+        private void DispatchMain() {
             _counter.SetCounterValue(0);
             _shader.SetBuffer(_kernelMain.i, "_counter", _counter);
+
             _shader.SetBuffer(_kernelMain.i, "_outVertices", _outVertices);
-            _shader.SetInt("_outStride", 12);
+            _shader.SetInt("_outStride", _outStride);
 
             _shader.SetFloats("u_plane", 0.0f, 1.0f, 0.0f);
             _shader.SetFloat("u_offset", 0.0f);
 
-            foreach (var target in targets) {
-                //var meshTarget = target._target;
-                //if (meshTarget is null)
-                //    continue;
-                //Debug.Log(meshTarget);
-                //_shader.SetBuffer(_kernelMain.i, "_inVertices", meshTarget?.vertices);
-                //_shader.SetBuffer(_kernelMain.i, "_inIndices", meshTarget?.indices);
-                //foreach (var subMesh in meshTarget?.subMeshes) {
-                //    _shader.SetInt("_inOffset", subMesh.start);
-                //    _shader.SetInt("_inCount", subMesh.count);
-                //    _shader.SetFloats("_inMaterial", 1.0f, 1.0f, 1.0f);
-                //    _shader.Dispatch(_kernelMain.i, NumGroups(subMesh.count, _kernelMain.dx), 1, 1);
-                //}
+            Matrix4x4 matrix = _controller._projection * _controller._view;
+            _shader.SetMatrix("u_matrix", matrix);
 
-                var skin = target.gameObject.GetComponents<SkinnedMeshRenderer>();
-                if (skin.Length == 0)
-                    continue;
-
-                Matrix4x4 matrix = controller._projection * controller._view;
-                //Matrix4x4 matrix = controller._view
-                _shader.SetMatrix("u_matrix", matrix);
-                _shader.SetMatrix("u_inverse", matrix.inverse);
-
-                var vertices = skin[0].GetVertexBuffer();
-                if (vertices is null)
-                    continue;
-
-                var indices = skin[0].sharedMesh.GetIndexBuffer();
-
-                Debug.Log(target);
-
-                _shader.SetBuffer(_kernelMain.i, "_inVertices", vertices);
-                _shader.SetBuffer(_kernelMain.i, "_inIndices", indices);
-
-                _shader.SetInt("_inOffset", 0);
-                _shader.SetInt("_inCount", indices.count);
-                _shader.SetInt("_inStride", vertices.stride);
-                _shader.SetFloats("_inMaterial", 1.0f, 1.0f, 1.0f);
-
-                _shader.Dispatch(_kernelMain.i, NumGroups(indices.count, _kernelMain.dx), 1, 1);
-
-                vertices.Dispose();
-                indices.Dispose();
+            foreach (var target in _targets) {
+                if (target.TryGetComponent(out SkinnedMeshRenderer skin)) {
+                    DispatchMain(skin);
+                } else if (target.TryGetComponent(out MeshFilter filter)) {
+                    DispatchMain(filter);
+                }
             }
+        }
 
-            Vector3[] data = new Vector3[UltrasoundSystem.MAX_VERTICES_OUT];
-            _outVertices.GetData(data);
-            Debug.Log($"{string.Join(", ", data.Take(12))}");
+        private void DispatchMain(SkinnedMeshRenderer skin) {
+            skin.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
+            skin.sharedMesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
+            skin.sharedMesh.indexBufferTarget |= GraphicsBuffer.Target.Raw;
+
+            GraphicsBuffer vertices = skin.GetVertexBuffer();
+            GraphicsBuffer indices = skin.sharedMesh.GetIndexBuffer();
+
+            DispatchMain(vertices, indices);
+        }
+
+        private void DispatchMain(MeshFilter filter) {
+            filter.mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
+            filter.mesh.indexBufferTarget |= GraphicsBuffer.Target.Raw;
+
+            GraphicsBuffer vertices = filter.mesh.GetVertexBuffer(0);
+            GraphicsBuffer indices = filter.mesh.GetIndexBuffer();
+
+            DispatchMain(vertices, indices);
+
+        }
+
+        private void DispatchMain(GraphicsBuffer vertices, GraphicsBuffer indices) {
+            _shader.SetBuffer(_kernelMain.i, "_inVertices", vertices);
+            _shader.SetBuffer(_kernelMain.i, "_inIndices", indices);
+            _shader.SetInt("_inStride", vertices.stride);
+
+            _shader.SetInt("_inOffset", 0);
+            _shader.SetInt("_inCount", indices.count);
+
+            _shader.Dispatch(_kernelMain.i, NumGroups(indices.count, _kernelMain.dx), 1, 1);
         }
 
         private void DispatchRaster() {

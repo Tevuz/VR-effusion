@@ -12,12 +12,14 @@ namespace Ultrasound {
         [SerializeField] private ComputeShader _shaderSimulate;
         [SerializeField] private ComputeShader _shaderIntersect;
 
+        [SerializeField] private UltrasoundMonitor[] _monitor;
+        [SerializeField] private UltrasoundController _controller;
+        [SerializeField] private GameObject[] _targets;
+
+        //[SerializeField] private SkinnedMeshRenderer _skin;
+
         private Simulate _simulate;
         private Intersect _intersect;
-
-        private UltrasoundTarget[] _targets;
-        private UltrasoundMonitor[] _monitor;
-        private UltrasoundController[] _controllers;
 
         private Mesh _mesh;
 
@@ -29,9 +31,8 @@ namespace Ultrasound {
             //_simulate = new Simulate(_shaderSimulate);
             _intersect = new Intersect(_shaderIntersect, _mesh);
 
-            _targets = FindObjectsByType<UltrasoundTarget>(FindObjectsSortMode.None);
-            _monitor = FindObjectsByType<UltrasoundMonitor>(FindObjectsSortMode.None);
-            _controllers = FindObjectsByType<UltrasoundController>(FindObjectsSortMode.None);
+            _intersect._targets = _targets;
+            _intersect._controller = _controller;
 
             foreach (var monitor in _monitor) {
                 Renderer renderer = monitor.gameObject.GetComponent<Renderer>();
@@ -41,7 +42,7 @@ namespace Ultrasound {
         }
 
         internal void Update() {
-            _intersect.Dispatch(_controllers.First(), _targets);
+            _intersect.Dispatch();
             //_simulate.Dispatch(_intersect.result, _intersect.result);
         }
     }

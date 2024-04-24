@@ -85,7 +85,7 @@ namespace Ultrasound{
         internal void Dispatch() {
             DispatchInit();
             DispatchMain();
-            //DispatchRaster();
+            DispatchRaster();
         }
 
         private void DispatchInit() {
@@ -106,7 +106,7 @@ namespace Ultrasound{
             _shader.SetFloat("u_offset", 0.0f);
 
             Matrix4x4 matrix = _controller._projection * _controller._view;
-            _shader.SetMatrix("u_matrix", matrix);
+            _shader.SetMatrix("matrix_view", matrix);
 
             foreach (var target in _targets) {
                 if (target.TryGetComponent(out SkinnedMeshRenderer skin)) {
@@ -125,7 +125,7 @@ namespace Ultrasound{
             GraphicsBuffer vertices = skin.GetVertexBuffer();
             GraphicsBuffer indices = skin.sharedMesh.GetIndexBuffer();
 
-            DispatchMain(vertices, indices);
+            DispatchMain(vertices, indices, skin.gameObject.transform.localToWorldMatrix);
         }
 
         private void DispatchMain(MeshFilter filter) {
@@ -135,11 +135,10 @@ namespace Ultrasound{
             GraphicsBuffer vertices = filter.mesh.GetVertexBuffer(0);
             GraphicsBuffer indices = filter.mesh.GetIndexBuffer();
 
-            DispatchMain(vertices, indices);
-
+            DispatchMain(vertices, indices, filter.gameObject.transform.localToWorldMatrix);
         }
 
-        private void DispatchMain(GraphicsBuffer vertices, GraphicsBuffer indices) {
+        private void DispatchMain(GraphicsBuffer vertices, GraphicsBuffer indices, Matrix4x4 model) {
             _shader.SetBuffer(_kernelMain.i, "_inVertices", vertices);
             _shader.SetBuffer(_kernelMain.i, "_inIndices", indices);
             _shader.SetInt("_inStride", vertices.stride);
@@ -147,10 +146,14 @@ namespace Ultrasound{
             _shader.SetInt("_inOffset", 0);
             _shader.SetInt("_inCount", indices.count);
 
+            _shader.SetMatrix("matrix_model", model);
+
             _shader.Dispatch(_kernelMain.i, NumGroups(indices.count, _kernelMain.dx), 1, 1);
         }
 
         private void DispatchRaster() {
+            Graphics.Blit(Texture2D.blackTexture, _outBuffer);
+
             _shader.SetBuffer(_kernelRaster.i, "_outVertices", _outVertices);
             _shader.SetTexture(_kernelRaster.i, "_outBuffer", _outBuffer);
 

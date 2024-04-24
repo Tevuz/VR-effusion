@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Ultrasound {
     public class UltrasoundSystem : MonoBehaviour {
 
-        internal static int MAX_VERTICES_OUT = 100;
+        internal static int MAX_VERTICES_OUT = 10000;
 
         [SerializeField] private ComputeShader _shaderSimulate;
         [SerializeField] private ComputeShader _shaderIntersect;
@@ -35,9 +35,11 @@ namespace Ultrasound {
             _intersect._controller = _controller;
 
             foreach (var monitor in _monitor) {
-                Renderer renderer = monitor.gameObject.GetComponent<Renderer>();
-                renderer.material.EnableKeyword("_EMISSION");
-                renderer.material.SetTexture("_EmissionMap", _intersect.result);
+                if (monitor.TryGetComponent(out Renderer renderer)) {
+                    print(monitor);
+                    renderer.material.EnableKeyword("_EMISSION");
+                    renderer.material.SetTexture("_EmissionMap", _intersect.result);
+                }
             }
         }
 

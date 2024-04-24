@@ -13,6 +13,8 @@ namespace Ultrasound {
         private RenderTexture _bufferSimulate;
         private RenderTexture _bufferPost;
 
+        internal RenderTexture result => _bufferPost;
+
         private readonly int WIDTH, HEIGHT;
         private int frame = 0;
 
@@ -60,14 +62,14 @@ namespace Ultrasound {
             _shader.SetInt("HEIGHT", HEIGHT);
         }
 
-        internal void Dispatch(RenderTexture source, RenderTexture destination) {
+        internal void Dispatch(RenderTexture source) {
             SetUniforms();
 
             DispatchNormal(source);
             DispatchSimulate(source);
             DispatchPost();
 
-            Graphics.Blit(_bufferPost, destination);
+            //Graphics.Blit(_bufferPost, destination);
 
             Clear();
         }
@@ -91,6 +93,7 @@ namespace Ultrasound {
             _shader.SetTexture(_kernelSimulate.i, "buffer_source", source);
             _shader.SetTexture(_kernelSimulate.i, "buffer_normal", _bufferNormal);
             _shader.SetTexture(_kernelSimulate.i, "buffer_simulate", _bufferSimulate);
+            _shader.SetTexture(_kernelSimulate.i, "buffer_post", _bufferPost);
             _shader.Dispatch(_kernelSimulate.i, _kernelSimulate.x, 1, 1);
         }
 

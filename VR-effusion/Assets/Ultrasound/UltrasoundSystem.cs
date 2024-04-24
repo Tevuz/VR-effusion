@@ -16,8 +16,6 @@ namespace Ultrasound {
         [SerializeField] private UltrasoundController _controller;
         [SerializeField] private GameObject[] _targets;
 
-        //[SerializeField] private SkinnedMeshRenderer _skin;
-
         private Simulate _simulate;
         private Intersect _intersect;
 
@@ -28,7 +26,7 @@ namespace Ultrasound {
             _mesh = filter.mesh = new Mesh();
             _mesh.name = "Intersection";
 
-            //_simulate = new Simulate(_shaderSimulate);
+            _simulate = new Simulate(_shaderSimulate);
             _intersect = new Intersect(_shaderIntersect, _mesh);
 
             _intersect._targets = _targets;
@@ -45,7 +43,7 @@ namespace Ultrasound {
 
         internal void Update() {
             _intersect.Dispatch();
-            //_simulate.Dispatch(_intersect.result, _intersect.result);
+            //_simulate.Dispatch(_intersect.result);
         }
     }
 }

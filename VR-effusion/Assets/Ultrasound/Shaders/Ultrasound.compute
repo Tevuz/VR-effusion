@@ -3,16 +3,15 @@
 #pragma kernel MainPost
 #pragma kernel MainNormal
 
-
 uint WIDTH;
 uint HEIGHT;
 uint FRAME;
 
 static uint SAMPLES = 10;
 
-RWTexture2D<float1> buffer_pass0;
-RWTexture2D<float1> buffer_pass1;
-RWTexture2D<float4> buffer_output;
+RWTexture2D<float1> buffer_source;
+RWTexture2D<float1> buffer_simulate;
+RWTexture2D<float4> buffer_post;
 RWTexture2D<float3> buffer_normal;
 
 static struct Rand {
@@ -145,7 +144,7 @@ void Main_pass0(uint3 id : SV_DispatchThreadID) {
     Rand_Init(id, FRAME);
 
     float2 pos = float2(id.xy) / float2(WIDTH, HEIGHT);
-    buffer_pass0[id.xy].x += ISO0(pos);
+    buffer_source[id.xy].x += ISO0(pos);
     /*if (id.y < 5) {
         buffer_pass0[id.xy].x = 1.0;
     } else {
@@ -195,7 +194,7 @@ void Raytrace(uint3 id) {
     float att = 1.0;
 
     float d0 = 0.0;
-    float d1 = buffer_pass0[src];
+    float d1 = buffer_source[src];
     float dd = d1;
 
     uint y = 0;
@@ -230,7 +229,7 @@ void Raytrace(uint3 id) {
         }
 
         d0 = d1;
-        d1 = buffer_pass0[src];
+        d1 = buffer_source[src];
 
         float r = Reflectance(dir, nor, d1 + 1.0, d0 + 1.0);
         if (Rand_Float() < 0.05 && Rand_Float() < r) {
@@ -269,10 +268,10 @@ void Raytrace(uint3 id) {
 
         float tt = (FRAME * 4) % (HEIGHT * 2);
         float s = smoothstep(4.0, 0.0, tt - d) * smoothstep(0.0, 0.0, tt - d);
-        buffer_output[src] += float4(delta * 0.05, 0.0, 0.0, 0.0);
-        buffer_output[src] += float4(0.0, 0.0, s, 0.0);
+        buffer_post[src] += float4(delta * 0.05, 0.0, 0.0, 0.0);
+        buffer_post[src] += float4(0.0, 0.0, s, 0.0);
 
-        buffer_pass1[dst] += att * delta * col;
+        buffer_simulate[dst] += att * delta * col;
 
         d += delta;
         att -= delta * 0.0012;
@@ -297,21 +296,21 @@ void MainPost(uint3 id : SV_DispatchThreadID) {
     int mode = 0;
 
     if (mode == 0) {
-        float3 col = buffer_pass1[uint2(id.x, HEIGHT - 1 - id.y)].r;
-        buffer_output[id.xy] = float4(1.0 - exp(-col * 4.15 / float(SAMPLES)), 1.0);
+        float3 col = buffer_simulate[id.xy].r;
+        buffer_post[id.xy] = float4(1.0 - exp(-col * 4.15 / float(SAMPLES)), 1.0);
     } else if (mode == 1) {
-        float3 col = buffer_output[id.xy].rgb;
+        float3 col = buffer_post[id.xy].rgb;
         col.rg += col.b;
-        buffer_output[id.xy] = float4(1.0 - exp(-col * 0.5 / float(SAMPLES)), 1.0);
+        buffer_post[id.xy] = float4(1.0 - exp(-col * 0.5 / float(SAMPLES)), 1.0);
     } else {
         //float c = smoothstep(-0.8, 1.0, Rand_Noise(id.xy * 0.015, 3, 0));
         //buffer_output[id.xy] = float4(c, c, c, 1.0);
-        buffer_output[id.xy] = float4(buffer_normal[id.xy].xyz * 0.5 + 0.5, 0.0);
+        buffer_post[id.xy] = float4(buffer_normal[id.xy].xyz * 0.5 + 0.5, 0.0);
     }
 }
 
 float getValue(int2 id) {
-    return buffer_pass0[clamp(id, 0, int2(WIDTH, HEIGHT) - 1)];
+    return buffer_source[clamp(id, 0, int2(WIDTH, HEIGHT) - 1)];
 }
 
 [numthreads(8,8,1)]
@@ -324,27 +323,5 @@ void MainNormal(uint3 id : SV_DispatchThreadID) {
             nor.xy += getValue(int2(id.x + x, id.y + y)) * sign(c) * exp(-c.x * c.x * 0.75) * exp(-c.y * c.y * 0.75);
         }
     }
-    /*nor.xy += getValue(int2(id.x - 1, id.y - 1)) * float2(-1, -1);
-    nor.xy += getValue(int2(id.x + 0, id.y - 1)) * float2(-1, -1);
-    nor.xy += getValue(int2(id.x + 1, id.y - 1)) * float2(+1, -1);
-    nor.xy += getValue(int2(id.x + 2, id.y - 1)) * float2(+1, -1);
-
-    nor.xy += getValue(int2(id.x - 1, id.y + 0)) * float2(-1, -1);
-    nor.xy += getValue(int2(id.x + 0, id.y + 0)) * float2(-1, -1);
-    nor.xy += getValue(int2(id.x + 1, id.y + 0)) * float2(+1, -1);
-    nor.xy += getValue(int2(id.x + 2, id.y + 0)) * float2(+1, -1);
-
-    nor.xy += getValue(int2(id.x - 1, id.y + 1)) * float2(-1, +1);
-    nor.xy += getValue(int2(id.x + 0, id.y + 1)) * float2(-1, +1);
-    nor.xy += getValue(int2(id.x + 1, id.y + 1)) * float2(+1, +1);
-    nor.xy += getValue(int2(id.x + 2, id.y + 1)) * float2(+1, +1);
-
-    nor.xy += getValue(int2(id.x - 1, id.y + 2)) * float2(-1, +1);
-    nor.xy += getValue(int2(id.x + 0, id.y + 2)) * float2(-1, +1);
-    nor.xy += getValue(int2(id.x + 1, id.y + 2)) * float2(+1, +1);
-    nor.xy += getValue(int2(id.x + 2, id.y + 2)) * float2(+1, +1);*/
-
-    nor = normalize(nor);
-
-    buffer_normal[id.xy] = nor;
+    buffer_normal[id.xy] = normalize(nor);
 }

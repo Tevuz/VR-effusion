@@ -71,7 +71,6 @@ crashlytics-build.properties
 /VR-effusion/[Aa]ssets/[Ss]treamingAssets/aa.meta
 /VR-effusion/[Aa]ssets/[Ss]treamingAssets/aa/*
 /VR-effusion/Assets/Anatomy_Ultimate_Pack
-<<<<<<< Updated upstream
 /VR-effusion/Logs
 /VR-effusion/Logs
 /VR-effusion/Logs
@@ -80,13 +79,11 @@ crashlytics-build.properties
 /VR-effusion/UserSettings/Layouts
 /VR-effusion/Logs
 /VR-effusion/UserSettings/Layouts
-=======
 /VR-effusion/Assets/Samples/XR Interaction Toolkit/2.5.4/Hands Interaction Demo
 /VR-effusion/Assets/Samples/XR Interaction Toolkit/2.5.4/Hands Interaction Demo
 /VR-effusion/Assets/Samples/XR Interaction Toolkit/2.5.4/Hands Interaction Demo
 VR-effusion/Assets/Samples/XR Interaction Toolkit/2.5.4/Hands Interaction Demo/AffordanceThemes/PinchPoint/PinchPointEdgeStrength.asset
 VR-effusion/Assets/Samples/XR Interaction Toolkit/2.5.4/Hands Interaction Demo/AffordanceThemes/PinchPoint/PinchPointEdgeStrength.asset.meta
->>>>>>> Stashed changes
 VR-effusion/Assets/Samples/XR Hands/1.3.0/HandVisualizer/Unity.XR.Hands.Samples.VisualizerSample.asmdef.meta
 VR-effusion/Assets/Samples/XR Hands/1.3.0/HandVisualizer/Unity.XR.Hands.Samples.VisualizerSample.asmdef
 VR-effusion/Assets/Samples/XR Hands/1.3.0/HandVisualizer/Scripts/HandVisualizer.cs.meta

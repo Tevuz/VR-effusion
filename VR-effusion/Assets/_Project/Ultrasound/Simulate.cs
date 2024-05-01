@@ -1,10 +1,13 @@
-﻿using UnityEngine;
+﻿using System.Runtime.InteropServices;
+using UnityEngine;
+using UnityEngine.Profiling;
 using static Ultrasound.Util;
 
 namespace Ultrasound {
     internal class Simulate {
 
         private ComputeShader _shader;
+        private (int i, int x, int y) _kernelPre;
         private (int i, int x, int y) _kernelNormal;
         private (int i, int x) _kernelSimulate;
         private (int i, int x, int y) _kernelPost;
@@ -44,6 +47,11 @@ namespace Ultrasound {
         private void InitShader() {
             uint tx, ty;
 
+            _kernelPre.i = _shader.FindKernel("MainPre");
+            _shader.GetKernelThreadGroupSizes(_kernelPre.i, out tx, out ty, out _);
+            _kernelPre.x = NumGroups(WIDTH, (int)tx);
+            _kernelPre.y = NumGroups(HEIGHT, (int)ty);
+
             _kernelNormal.i = _shader.FindKernel("MainNormal");
             _shader.GetKernelThreadGroupSizes(_kernelNormal.i, out tx, out ty, out _);
             _kernelNormal.x = NumGroups(WIDTH, (int)tx);
@@ -62,16 +70,20 @@ namespace Ultrasound {
             _shader.SetInt("HEIGHT", HEIGHT);
         }
 
-        internal void Dispatch(RenderTexture source) {
+        internal void Dispatch(ComputeBuffer source) {
+            Profiler.BeginSample("Ultrasound Simulate");
+
+            Clear();
             SetUniforms();
 
+            DispatchPre(source);
             DispatchNormal(source);
             DispatchSimulate(source);
             DispatchPost();
 
-            //Graphics.Blit(_bufferPost, destination);
+            Profiler.EndSample();
 
-            Clear();
+            //Graphics.Blit(_bufferPost, destination);
         }
 
         private void Clear() {
@@ -83,14 +95,19 @@ namespace Ultrasound {
             _shader.SetInt("FRAME", frame++);
         }
 
-        private void DispatchNormal(RenderTexture source) {
-            _shader.SetTexture(_kernelNormal.i, "buffer_source", source);
+        private void DispatchPre(ComputeBuffer source) {
+            _shader.SetBuffer(_kernelPre.i, "buffer_source", source);
+            _shader.Dispatch(_kernelPre.i, _kernelPre.x, _kernelPre.y, 1);
+        }
+
+        private void DispatchNormal(ComputeBuffer source) {
+            _shader.SetBuffer(_kernelNormal.i, "buffer_source", source);
             _shader.SetTexture(_kernelNormal.i, "buffer_normal", _bufferNormal);
             _shader.Dispatch(_kernelNormal.i, _kernelNormal.x, _kernelNormal.y, 1);
         }
 
-        private void DispatchSimulate(RenderTexture source) {
-            _shader.SetTexture(_kernelSimulate.i, "buffer_source", source);
+        private void DispatchSimulate(ComputeBuffer source) {
+            _shader.SetBuffer(_kernelSimulate.i, "buffer_source", source);
             _shader.SetTexture(_kernelSimulate.i, "buffer_normal", _bufferNormal);
             _shader.SetTexture(_kernelSimulate.i, "buffer_simulate", _bufferSimulate);
             _shader.SetTexture(_kernelSimulate.i, "buffer_post", _bufferPost);
@@ -99,6 +116,7 @@ namespace Ultrasound {
 
         private void DispatchPost() {
             _shader.SetTexture(_kernelPost.i, "buffer_simulate", _bufferSimulate);
+            _shader.SetTexture(_kernelPost.i, "buffer_normal", _bufferNormal);
             _shader.SetTexture(_kernelPost.i, "buffer_post", _bufferPost);
             _shader.Dispatch(_kernelPost.i, _kernelPost.x, _kernelPost.y, 1);
         }

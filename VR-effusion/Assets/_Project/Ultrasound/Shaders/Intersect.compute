@@ -1,0 +1,340 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel Main
+#pragma kernel Init
+#pragma kernel Clear
+#pragma kernel Raster
+#pragma kernel Fill
+#pragma kernel Blit
+
+#define SIZEOF_FLOAT 4
+#define SIZEOF_FLOAT3 12
+#define SIZEOF_INDEX 4
+
+uint MAX_VERTICES_OUT;
+uint WIDTH, HEIGHT;
+
+struct Material {
+    int mask;
+    float density;
+    float attenuation;
+};
+
+ByteAddressBuffer _inVertices;
+ByteAddressBuffer _inIndices;
+
+uint _inOffset = 0;
+uint _inCount;
+uint _vertexStride;
+uint _indexStride;
+
+Material _inMaterial;
+
+uint3 readTriangle(uint i) {
+    return _inIndices.Load3((i * 3 + _inOffset) * _indexStride);
+}
+
+float3 readVertex(uint i) {
+    float3 r = asfloat(_inVertices.Load3(i * _vertexStride));
+    return r;
+}
+RWStructuredBuffer<uint> _counter;
+RWByteAddressBuffer _outVertices;
+uint _outStride;
+
+void writeVertex(uint i, float3 position, Material material) {
+    _outVertices.Store3(i * _outStride +  0, asuint(position));
+    _outVertices.Store (i * _outStride + 12, asuint(material.mask));
+    _outVertices.Store (i * _outStride + 16, asuint(material.density));
+    _outVertices.Store (i * _outStride + 20, asuint(material.attenuation));
+}
+
+RWStructuredBuffer<Material> _outBuffer;
+
+Material readMaterial(int2 i) {
+    return _outBuffer.Load(i.y * WIDTH + i.x);
+}
+
+void writeMaterial(int2 i, Material material) {
+    _outBuffer[i.y * WIDTH + i.x] = material;
+}
+
+RWTexture2D<float4> _outTexture;
+
+float4x4 matrix_view;
+float4x4 matrix_model;
+float4x4 u_inverse;
+float3 u_plane;
+float u_offset;
+
+uint material_layer;
+float material_density;
+float material_attenuation;
+
+float3 clip(float3 f) {
+    float3 a = abs(f);
+    float m = max(max(a.x, a.y), a.z);
+    if (m > 1.0)
+        f /= m;
+    return f;
+}
+
+bool onScreen(float3 a, float3 b, float3 c) {
+    return any(min(min(a, b), c) <= 1.0) && any(max(max(a, b), c) >= -1.0);
+}
+
+static const float s = 1.0 / 0.1;
+void compress(inout float3 v0) {
+    v0.z = -(s - log(1 + exp((v0.z + 1) * s))) / s;
+}
+
+bool clip(inout float3 v0, inout float3 v1) {
+    if (v0.x > 1.0 && v1.x > 1.0)
+        return false;
+    if (v0.x <-1.0 && v1.x <-1.0)
+        return false;
+    if (v0.z > 1.0 && v1.z > 1.0)
+        return false;
+    if (v0.z <-1.0 && v1.z <-1.0)
+        return false;
+
+    if (v0.x > 1.0)
+        v0 = v0 + (v1 - v0) * -(v0.x - 1.0) / (v1.x - v0.x);
+    if (v0.x <-1.0)
+        v0 = v0 + (v1 - v0) * -(v0.x + 1.0) / (v1.x - v0.x);
+
+    if (v1.x > 1.0)
+        v1 = v1 + (v0 - v1) * -(v1.x - 1.0) / (v0.x - v1.x);
+    if (v1.x <-1.0)
+        v1 = v1 + (v0 - v1) * -(v1.x + 1.0) / (v0.x - v1.x);
+
+    if (v0.z > 1.0)
+        v0 = v0 + (v1 - v0) * -(v0.z - 1.0) / (v1.z - v0.z);
+    if (v0.z <-1.0)
+        v0 = v0 + (v1 - v0) * -(v0.z + 1.0) / (v1.z - v0.z);
+
+    if (v1.z > 1.0)
+        v1 = v1 + (v0 - v1) * -(v1.z - 1.0) / (v0.z - v1.z);
+    if (v1.z <-1.0)
+        v1 = v1 + (v0 - v1) * -(v1.z + 1.0) / (v0.z - v1.z);
+
+    return true;
+}
+
+[numthreads(64,1,1)]
+void Main(uint3 id : SV_DispatchThreadID) {
+    if (id.x * 3 >= _inCount)
+        return;
+
+    uint3 i = readTriangle(id.x);
+
+    float3 p0 = readVertex(i.x);
+    float3 p1 = readVertex(i.y);
+    float3 p2 = readVertex(i.z);
+
+    float4x4 modelView = mul(matrix_view, matrix_model);
+
+    float3 v0 = mul(modelView, float4(p0, 1.0)).xyz;
+    float3 v1 = mul(modelView, float4(p1, 1.0)).xyz;
+    float3 v2 = mul(modelView, float4(p2, 1.0)).xyz;
+
+    //if (!onScreen(v0, v1, v2))
+    //    return;
+
+    float d0 = dot(v0, u_plane) - u_offset;
+    float d1 = dot(v1, u_plane) - u_offset;
+    float d2 = dot(v2, u_plane) - u_offset;
+
+    float l01 = -(d0) / dot(v1 - v0, u_plane);
+    float l12 = -(d1) / dot(v2 - v1, u_plane);
+    float l20 = -(d2) / dot(v0 - v2, u_plane);
+
+    bool i0 = (0.0 < l01 && l01 < 1.0);
+    bool i1 = (0.0 < l12 && l12 < 1.0);
+    bool i2 = (0.0 < l20 && l20 < 1.0);
+
+    float3 w0 = 0.0, w1 = 0.0;
+
+    if (i0 && i1) {
+        w0 = lerp(v0, v1, l01);
+        w1 = lerp(v1, v2, l12);
+    } else if (i1 && i2) {
+        w0 = lerp(v1, v2, l12);
+        w1 = lerp(v2, v0, l20);
+    } else if (i2 && i0) {
+        w0 = lerp(v2, v0, l20);
+        w1 = lerp(v0, v1, l01);
+    } else if (abs(d0) + abs(d1) <= 0.001) {
+        w0 = v0;
+        w1 = v1;
+    } else if (abs(d1) + abs(d2) <= 0.001) {
+        w0 = v1;
+        w1 = v2;
+    } else if (abs(d2) + abs(d0) <= 0.001) {
+        w0 = v2;
+        w1 = v0;
+    } else {
+        return;
+    }
+
+    //compress(w0);
+    //compress(w1);
+    if (!clip(w0, w1))
+        return;
+
+    uint c = 2 * _counter.IncrementCounter();
+    if (c >= MAX_VERTICES_OUT)
+        return;
+
+    Material material;
+    material.mask = material_layer;
+    material.density = material_density;
+    material.attenuation = material_attenuation;
+
+    writeVertex(c + 0, w0, material);
+    writeVertex(c + 1, w1, material);
+}
+
+static const Material AIR = {0, 0.0, 0.01};
+static const float3 null = float3(0.0, 0.0, 0.0);
+
+[numthreads(64, 1, 1)]
+void Init(uint3 id : SV_DispatchThreadID) {
+    while(true) {
+        uint c = 2 * _counter.IncrementCounter();
+        if (c >= MAX_VERTICES_OUT)
+            break;
+
+        writeVertex(c + 0, null, AIR);
+        writeVertex(c + 1, null, AIR);
+    }
+}
+
+[numthreads(64, 1, 1)]
+void Clear(uint3 id : SV_DispatchThreadID) {
+    if (id.x > HEIGHT)
+        return;
+
+
+    for (uint x = 0; x < WIDTH; x++) {
+        writeMaterial(int2(x, id.x), AIR);
+    }
+}
+
+
+[numthreads(64, 1, 1)]
+void Raster(uint3 id : SV_DispatchThreadID) {
+    uint c = 2 * id.x;
+    if (c > MAX_VERTICES_OUT)
+        return;
+
+    int2 v0 = int2((asfloat(_outVertices.Load3((c + 0) * _outStride)).xz * float2(0.5, -0.5) + 0.5) * float2(WIDTH, HEIGHT));
+    int2 v1 = int2((asfloat(_outVertices.Load3((c + 1) * _outStride)).xz * float2(0.5, -0.5) + 0.5) * float2(WIDTH, HEIGHT));
+
+    int mask = asint(_outVertices.Load((c + 0) * _outStride + 12));
+    mask = 1 << (mask - 1);
+
+    Material material;
+    material.density = asfloat(_outVertices.Load((c + 0) * _outStride + 16));
+    material.attenuation = asfloat(_outVertices.Load((c + 0) * _outStride + 20));
+
+    if (v1.x < v0.x) {
+        int2 t = v0;
+        v0 = v1;
+        v1  = t;
+    }
+
+    int dx = v1.x - v0.x;
+    int dy = v1.y - v0.y;
+
+    //int ya = (v0.y + v1.y) >> 1;
+    //ya /= 10;
+
+
+
+    v0.y -= step(dy, 0) * 2;
+    v1.y -= step(-dy, 0) * 2;
+
+    for (int x = max(0, v0.x); x < min(int(WIDTH), v1.x); x++) {
+        int y = int(v0.y + (x - v0.x) * dy / float(dx));
+        if (y < 0 || y >= int(HEIGHT))
+            continue;
+
+        Material current = readMaterial(int2(x, y));
+        Material output;
+        output.density = (current.mask > mask) ? current.density : material.density;
+        output.attenuation = (current.mask > mask) ? current.attenuation : material.attenuation;
+        output.mask = current.mask ^ mask;
+
+        writeMaterial(int2(x, y), output);
+    }
+}
+
+static Material materials[32];
+
+int leastSignificantBit(int i) {
+    return i & (i - 1);
+}
+
+
+int trailingZeros(int bin) {
+    bin--;
+    int c = 0;
+    for (;bin != 0; c++)
+        bin = bin & (bin - 1);
+    return c;
+}
+
+int indexOfMSB(uint m) {
+    if (m == 0)
+        return -1;
+
+    int i = 0;
+    while (m > 1) {
+        m >>= 1;
+        i++;
+    }
+
+    return i;
+}
+
+[numthreads(64, 1, 1)]
+void Fill(uint3 id : SV_DispatchThreadID) {
+    if (id.x > WIDTH)
+        return;
+
+    materials[0] = AIR;
+
+    int mask = 0;
+    Material material;
+
+
+    for (int y = HEIGHT - 1; y >= 0; y--) {
+        Material input = readMaterial(int2(id.x, y));
+
+
+        if (input.mask != 0) {
+            mask ^= input.mask;
+            int layer = indexOfMSB(mask);
+
+            bool entering = (mask & input.mask) != 0;
+            if (entering) {
+                materials[layer] = input;
+            }
+            material = materials[layer];
+        }
+
+        writeMaterial(int2(id.x, y), material);
+    }
+}
+
+[numthreads(64, 1, 1)]
+void Blit(uint3 id : SV_DispatchThreadID) {
+    if (id.x > WIDTH)
+        return;
+
+    for (uint y = 0; y < HEIGHT; y++) {
+        int2 c = int2(id.x, y);
+        Material material = readMaterial(c);
+        _outTexture[c] = float4(float3(1.0 - exp(-material.density), 0.0, material.attenuation), 1.0);
+    }
+}

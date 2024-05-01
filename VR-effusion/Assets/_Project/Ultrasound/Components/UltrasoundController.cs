@@ -9,38 +9,43 @@ namespace Ultrasound
 {
     public class UltrasoundController : MonoBehaviour {
 
-        [SerializeField] internal float _width;
-        [SerializeField] internal float _depth;
+        [SerializeField, Min(0)] internal float _width;
+        [SerializeField, Min(0)] internal float _depth;
         [SerializeField, Range(0, 60)] internal float _ARC;
 
-        [SerializeField] internal Matrix4x4 _projection = Matrix4x4.identity;
-        [SerializeField] internal Matrix4x4 _view = Matrix4x4.identity;
+        internal Matrix4x4 _projection = Matrix4x4.identity;
+        internal Matrix4x4 _view => transform.worldToLocalMatrix;
 
         internal Mesh _mesh;
         internal GraphicsBuffer _vertices;
         internal GraphicsBuffer _indices;
 
-        private void OnValidate() {
+        private void Start() {
+            _width = 0.09f;
+            _depth = 0.15f;
             float w = _width * 0.5f;
             _projection = Matrix4x4.Ortho(-w, w, -w, w, 0.0f, -_depth);
-
 
             InitMesh();
             Render();
         }
 
-        // Update is called once per frame
-        void Update() {
-            _view = transform.worldToLocalMatrix;
+        private void OnDestroy() {
+            _vertices.Release();
+            _indices.Release();
         }
 
+#if UNITY_EDITOR
+        private void OnValidate() {
+            float w = _width * 0.5f;
+            _projection = Matrix4x4.Ortho(-w, w, -w, w, 0.0f, -_depth);
+            Render();
+        }
+#endif
+
         private void InitMesh() {
-            _vertices?.Dispose();
-            _indices?.Dispose();
-            //_mesh = transform.GetChild(0).gameObject.GetComponent<MeshFilter>().mesh;
-            MeshFilter filter = GetComponent<MeshFilter>();
-            _mesh = filter.mesh = new Mesh();
-            _mesh.name = "Frustum";
+            _mesh = new Mesh(){ name = "Frustum" };
+            GetComponent<MeshFilter>().mesh = _mesh;
 
             _mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
             _mesh.indexBufferTarget |= GraphicsBuffer.Target.Raw;
@@ -56,11 +61,13 @@ namespace Ultrasound
             _indices = _mesh.GetIndexBuffer();
 
             _indices.SetData(new[]{0, 1, 1, 2, 2, 3, 3, 0});
+
+            Render();
         }
 
         private void Render() {
             var inverse = _projection.inverse;
-            _vertices.SetData(new[] {
+            _vertices?.SetData(new[] {
                 (inverse.MultiplyPoint(new Vector3(-1, 0, -1))),
                 (inverse.MultiplyPoint(new Vector3(-1, 0, +1))),
                 (inverse.MultiplyPoint(new Vector3(+1, 0, +1))),

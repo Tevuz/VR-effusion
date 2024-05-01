@@ -14,7 +14,9 @@ namespace Ultrasound {
 
         [SerializeField] private UltrasoundMonitor[] _monitor;
         [SerializeField] private UltrasoundController _controller;
-        [SerializeField] private GameObject[] _targets;
+        [SerializeField] private UltrasoundTarget[] _targets;
+
+        private const int WIDTH = 256, HEIGHT = 256;
 
         private Simulate _simulate;
         private Intersect _intersect;
@@ -23,11 +25,11 @@ namespace Ultrasound {
 
         internal void Start() {
             MeshFilter filter = GetComponent<MeshFilter>();
-            _mesh = filter.mesh = new Mesh();
+            _mesh = filter.mesh;
             _mesh.name = "Intersection";
 
-            _simulate = new Simulate(_shaderSimulate);
-            _intersect = new Intersect(_shaderIntersect, _mesh);
+            _simulate = new Simulate(_shaderSimulate, WIDTH, HEIGHT);
+            _intersect = new Intersect(_shaderIntersect, _mesh, WIDTH, HEIGHT);
 
             _intersect._targets = _targets;
             _intersect._controller = _controller;
@@ -36,14 +38,18 @@ namespace Ultrasound {
                 if (monitor.TryGetComponent(out Renderer renderer)) {
                     print(monitor);
                     renderer.material.EnableKeyword("_EMISSION");
-                    renderer.material.SetTexture("_EmissionMap", _intersect.result);
+                    renderer.material.SetTexture("_EmissionMap", _simulate.result);
                 }
             }
         }
 
         internal void Update() {
             _intersect.Dispatch();
-            //_simulate.Dispatch(_intersect.result);
+            _simulate.Dispatch(_intersect._outBuffer);
+        }
+
+        private void OnDestroy() {
+            _intersect.Dispose();
         }
     }
 }

@@ -1,0 +1,59 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel MainRaycast
+
+#define SIZEOF_INDEX 12
+#define MAX_HIT_COUNT 8
+
+float3 _rayPos;
+float3 _rayDir;
+
+RWStructuredBuffer<uint> _distance;
+
+ByteAddressBuffer _vertices;
+ByteAddressBuffer _indices;
+uint _stride;
+uint _offset;
+uint _length;
+
+#define readTriangle(i) _indices.Load3((i + _offset) * SIZEOF_INDEX)
+#define readVertex(i) asfloat(_vertices.Load3((i    ) * _stride))
+#define readNormal(i) asfloat(_vertices.Load3((i + 3) * _stride))
+
+float intersect(float3 v0, float3 v1, float3 v2) {
+    float3 v10 = v1 - v0;
+    float3 v20 = v2 - v0;
+    float3 d0 = _rayPos - v0;
+
+    float3 n = cross(v10, v20);
+    float3 q = cross(d0, _rayDir);
+
+    float d = 1.0 / dot(_rayDir, n);
+
+    float u = d * dot(-q, v20);
+    float v = d * dot( q, v10);
+    float t = d * dot(-n, d0);
+
+    if(u < 0.0 || u > 1.0 || v < 0.0 || (u + v) > 1.0)
+        return 1.#INF;
+
+    return t;
+}
+
+int lock = -1;
+
+[numthreads(32,1,1)]
+void MainRaycast(uint3 id : SV_DispatchThreadID) {
+    if (id.x * 3 >= _length)
+        return;
+    uint3 t = readTriangle(id.x * 3);
+
+    float3 v0 = readVertex(t.x);
+    float3 v1 = readVertex(t.y);
+    float3 v2 = readVertex(t.z);
+
+    float d = intersect(v0, v1, v2);
+    if (d < 0.0 || d >= _distance[0])
+        return;
+
+    InterlockedMin(_distance[0], uint(d), _);
+}

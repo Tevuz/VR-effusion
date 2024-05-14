@@ -6,10 +6,10 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 0
-    path: Assets/Scenes/1 Start Scene.unity
+    path: Assets/_Project/Scenes/1 Start Scene.unity
     guid: 108a4f75c8a669e4a95469ac24da9994
   - enabled: 1
-    path: Assets/Scenes/2 Knee Scene.unity
+    path: Assets/_Project/Scenes/2 Knee Scene.unity
     guid: 64945fd2014c9ee4097ac2503493b015
   m_configObjects:
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 968b5ba7b14160844b155fd506321bd2, type: 2}

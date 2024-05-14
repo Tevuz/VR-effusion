@@ -1,25 +1,27 @@
-using System.Collections;
-using System.Collections.Generic;
+using System;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
+using UnityEngine.XR.Interaction.Toolkit.Transformers;
 
-public class XRGrabInteractableTwoAttach : XRGrabInteractable
-{
+namespace VREffusion {
+    public class XRGrabInteractableTwoAttach : XRGrabInteractable {
 
-    public Transform leftAttachTransform;
-    public Transform rightAttachTransform;
-    protected override void OnSelectEntered(SelectEnterEventArgs args)
-    {
-        if (args.interactorObject.transform.CompareTag("Left Hand"))
-        {
-            attachTransform = leftAttachTransform;
+        public Transform leftAttachTransform;
+        public Transform rightAttachTransform;
 
-        }
-        else if (args.interactableObject.transform.CompareTag("Right Hand"))
-        {
-            attachTransform = rightAttachTransform;
+        private void Start() {
         }
 
-        base.OnSelectEntered(args);
+        public override Transform GetAttachTransform(IXRInteractor interactor) {
+            if (interactor.transform.CompareTag("Left Hand")) {
+                attachTransform = leftAttachTransform;
+            } else if (interactor.transform.CompareTag("Right Hand")) {
+                attachTransform = rightAttachTransform;
+            }
+
+            return attachTransform;
+        }
     }
 }

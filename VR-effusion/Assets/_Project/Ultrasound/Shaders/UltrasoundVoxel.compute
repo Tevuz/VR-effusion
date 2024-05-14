@@ -1,0 +1,305 @@
+#pragma kernel SimulateMain
+#pragma kernel SimulatePost
+#pragma kernel SimulateNormal
+
+uint WIDTH;
+uint HEIGHT;
+uint DEPTH;
+uint FRAME;
+
+#define toIndex2(id) (int(id.y) * WIDTH + int(id.x))
+#define toIndex3(id) ((int(id.z) * HEIGHT + int(id.y)) * WIDTH + int(id.x))
+
+static uint SAMPLES = 10;
+
+// ---- Type Definitions ----
+
+struct Material {
+    float density;
+    float attenuation;
+};
+static const Material AIR = {0.0, 1.0};
+
+struct VoxelMask {
+    int fill;
+    int back;
+};
+
+// ---- Helper functions ----
+
+int MSB(uint mask) {
+    if (mask == 0)
+        return -1;
+
+    int index = 0;
+    while ((mask >>= 1) > 0)
+        index++;
+
+    return index;
+}
+
+StructuredBuffer<Material> buffer_material;
+StructuredBuffer<VoxelMask> buffer_source;
+RWStructuredBuffer<float3> buffer_normal;
+RWTexture2D<float1> buffer_simulate;
+RWTexture2D<float4> buffer_post;
+
+Material readMaterial(int3 src) {
+    VoxelMask mask = buffer_source[toIndex3(src)];
+    int layer = MSB(mask.fill);
+    if (layer < 0)
+        return AIR;
+    return buffer_material[layer];
+}
+
+// ---- Rand library ----
+
+static struct Rand {
+    uint seed;
+    uint state;
+} rand;
+
+uint Rand_Hash(uint m, uint seed) {
+    m *= 0xB5297A4Du;
+    m += seed;
+    m ^= (m >> 8);
+    m += 0x68E31DA4u;
+    m ^= (m << 8);
+    m *= 0x1B56C4E9u;
+    m ^= (m >> 8);
+    return m;
+}
+
+uint Rand_Next() {
+    rand.state = Rand_Hash(rand.state, rand.seed);
+    return rand.state;
+}
+
+float toFloat(uint m) {
+    m &= 0x007FFFFFu;
+    m |= 0x3F800000u;
+    return asfloat(m) - 1.0;
+}
+
+float Rand_Float() {
+    return toFloat(Rand_Next());
+}
+
+float2 toFloat2(float f) {
+    float2 f2 = float2(0.0, 0.0);
+    sincos(f * 6.2832, f2.x, f2.y);
+    return f2;
+}
+
+float2 Rand_Float2() {
+    return toFloat2(Rand_Float());
+}
+
+float3 Rand_Float3() {
+    float2 a = Rand_Float2();
+    float z = lerp(-1.0, 1.0, Rand_Float());
+    return float3(a * sqrt(1.0 - z * z), z);
+}
+
+void Rand_Init(uint3 id, uint seed) {
+    rand.seed = FRAME;
+    rand.seed = Rand_Hash(seed, rand.seed);
+    rand.seed = Rand_Hash(id.z, rand.seed);
+    rand.seed = Rand_Hash(id.x, rand.seed);
+    rand.seed = Rand_Hash(id.y, rand.seed);
+}
+
+// ---- Main Simulate ----
+
+// true Reflectance
+//float Reflectance(float2 dir, float2 nor, float d0, float d1) {
+//    if (dot(nor, nor) < 0.99)
+//        return 0.0;
+//    float n = d0 / d1;
+//
+//    float cosI = -dot(nor, dir);
+//    float sinT2 = n * n * (1.0 - cosI * cosI);
+//    if (sinT2 > 1.0)
+//        return 1.0;
+//
+//    float cosT = sqrt(1.0 - sinT2);
+//    float r0 = (d0 * cosI - d1 * cosT) / (d0 * cosI + d1 * cosT);
+//    float r1 = (d1 * cosI - d0 * cosT) / (d1 * cosI + d0 * cosT);
+//
+//    return (r0 * r0 + r1 * r1) * 0.5;
+//}
+
+// schlick approximation
+float Reflectance(float3 dir, float3 nor, float d0, float d1) {
+    float r0 = (d0 - d1) / (d0 + d1);
+    r0 *= r0;
+
+    float cosI = -dot(nor, dir);
+    if (d0 > d1) {
+        float n = d0 / d1;
+        float sinT2 = n * n * (1.0 - cosI * cosI);
+        if (sinT2 > 1.0)
+                return 1.0;
+        cosI = sqrt(1.0 - sinT2);
+    }
+    float x = 1.0 - cosI;
+    return r0 + (1.0 - r0) * x * x * x * x * x;
+}
+
+void DDA(in int3 src, in float3 pos, in float3 dir, out int3 step, out float delta) {
+    float3 rem = (pos - src);
+    float3 dist = (dir < 0.0 ? rem : 1.0 - rem) / max(1e-20, abs(dir));
+
+    float3 mask = dist <= min(dist.zxy, dist.yzx);
+    step = dir < 0.0 ? -mask : mask;
+
+    delta = min(dist.x, min(dist.y, dist.z));
+}
+
+void Raytrace(uint3 id) {
+    int3 src = uint3(id.xy, 0.0);
+    float3 dst = float3(id.xy + 0.5, 0.0);
+
+    //float d = 0.0;
+    float3 pos = float3(id.xy + Rand_Float2(), 0.0);
+    float3 dir = float3(0.0, 0.0, 1.0);
+    float3 nor = float3(0.0, 0.0, 1.0);
+
+    float col = 0.0;
+    float att = 1.0;
+
+    float d0 = 0.2;
+    float d1 = 1.0;//readDensity(src);
+    float dd = d1;
+
+    uint z = 0;
+    do {
+        int3 step;
+        float delta;
+        DDA(src, pos, dir, step, delta);
+
+        src += step;
+        pos += delta * dir;
+        dst.z += delta;
+
+        col = 0.0;
+
+        if (src.z < 0.0) {
+            src -= step;
+            step = -step;
+            dir = reflect(dir, step);
+        }
+        if (any(src < 0.0) || any(src >= float3(WIDTH, HEIGHT, DEPTH)))
+            break;
+
+        /* normal */ {
+            //float3 pf = frac(pos - src);
+            //float nf = max(pf.x, pf.y);
+            nor = buffer_normal.Load(toIndex3(src)).xyz;
+            //nor = lerp(buffer_normal[toIndex3(src)].xyz, buffer_normal[toIndex3(src + abs(step.yzx))].xyz, nf);
+            if (dot(nor, nor) > 0.01) {
+                nor = normalize(nor);
+            } else {
+                nor = -step;
+            }
+        }
+
+        Material material = readMaterial(src);
+
+        d0 = d1;
+        d1 = material.density;
+
+        float r = Reflectance(dir, nor, d1 + 1.0, d0 + 1.0);
+        if (Rand_Float() < 0.05 && Rand_Float() < r) {
+            float3 _dir = normalize(reflect(dir, nor) + Rand_Float3() * Rand_Float() * 0.05);
+            if (dot(_dir, -step) < 0.0) {
+                src -= step;
+                d1 = d0;
+            }
+            float a = abs(dot(dir, _dir));
+            col = pow(a, 15.0);
+
+            att *= 0.5 + 0.5 * a * a;
+            dir = _dir;
+
+
+        } else {
+            float n = (d1 + 1.0) / (d0 + 1.0);
+            //col = max(n - 1.0, 1.0 / n - 1.0);
+            //col = max(0.0, n - 1.0) * d1;
+            float3 _dir = normalize(dir - refract(dir, nor, 1.0 / n) * 0.3 + Rand_Float3() * Rand_Float() * 0.05);
+
+            col = smoothstep(0.0, 1.0, pow(abs(dot(-dir, nor)), 0.5)) * max(0.0, n - 1.0);
+
+            att *= n;
+            float a = abs(dot(dir, _dir));
+            att *= 0.5 + 0.5 * a * a;
+            dir = _dir;
+        }
+
+        col += (d1 - dd);
+        dd = lerp(d1, dd, 0.75);
+
+
+        //float tt = (FRAME * 4) % (HEIGHT * 2);
+        //float s = smoothstep(4.0, 0.0, tt - d) * smoothstep(0.0, 0.0, tt - d);
+        //buffer_post[src] += float4(delta * 0.05, 0.0, 0.0, 0.0);
+        //buffer_post[src] += float4(0.0, 0.0, s, 0.0);
+
+        att *= 1.0 - material.attenuation * material.attenuation;
+
+        int index = toIndex2(dst.xz);
+        buffer_simulate[dst.xz] += att * delta * col;
+
+        //d += delta;
+        att -= delta * 0.0003;
+        if (att < 0.001)
+            break;
+
+
+    } while (++z < DEPTH);
+}
+
+[numthreads(8, 1, 1)]
+void SimulateMain(uint3 id : SV_DispatchThreadID) {
+    Rand_Init(id, 1002);
+
+    for (uint i = 0; i < SAMPLES; i++) {
+        Raytrace(id);
+    }
+}
+
+// --- Main Post ----
+
+[numthreads(8,8,1)]
+void SimulatePost(uint3 id : SV_DispatchThreadID) {
+    float3 col = buffer_simulate[id.xy].r;
+    col = 1.0 - exp(col * -4.0 / float(SAMPLES));
+    col = pow(max(0.0, col), 0.45);
+    col = col*col*(3.0-2.0*col);
+
+    buffer_post[int2(id.x, HEIGHT - id.y - 1)] = float4(col, 1.0);
+}
+
+float getValue(int3 id) {
+    return readMaterial(clamp(id, 0, int3(WIDTH, HEIGHT, DEPTH) - 1)).density;
+}
+
+// ---- Main Normal ----
+
+[numthreads(4,4,4)]
+void SimulateNormal(uint3 id : SV_DispatchThreadID) {
+    Rand_Init(id.xyz, 1005);
+    float3 nor = Rand_Float3();
+    const int SIZE = 2;
+    for (int z = 1-SIZE; z <= SIZE; z++) {
+        for (int y = 1-SIZE; y <= SIZE; y++) {
+            for (int x = 1-SIZE; x <= SIZE; x++) {
+                float3 c = float3(x, y, z) - 0.5;
+                nor += getValue(int3(id.x + x, id.y + y, id.z + z)) * sign(c) * exp(-c.x * c.x * 0.75) * exp(-c.y * c.y * 0.75) * exp(-c.z * c.z * 0.75);
+            }
+        }
+    }
+    buffer_normal[toIndex3(id.xyz)] = normalize(nor);
+}
+

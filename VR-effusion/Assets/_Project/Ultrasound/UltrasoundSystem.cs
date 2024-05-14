@@ -12,7 +12,7 @@ namespace Ultrasound {
         [SerializeField] private ComputeShader _shaderSimulate;
         [SerializeField] private ComputeShader _shaderIntersect;
 
-        [SerializeField] private UltrasoundMonitor[] _monitor;
+        [SerializeField] private UltrasoundMonitor[] _monitors;
         [SerializeField] private UltrasoundController _controller;
         [SerializeField] private UltrasoundTarget[] _targets;
 
@@ -34,7 +34,7 @@ namespace Ultrasound {
             _intersect._targets = _targets;
             _intersect._controller = _controller;
 
-            foreach (var monitor in _monitor) {
+            foreach (var monitor in _monitors) {
                 if (monitor.TryGetComponent(out Renderer renderer)) {
                     print(monitor);
                     renderer.material.EnableKeyword("_EMISSION");

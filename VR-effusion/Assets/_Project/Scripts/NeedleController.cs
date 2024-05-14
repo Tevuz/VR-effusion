@@ -1,54 +1,48 @@
 using System;
 using System.Collections;
+using Unity.Mathematics;
 using Unity.XR.CoreUtils;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.XR.Interaction.Toolkit;
+using UnityEngine.XR.Interaction.Toolkit.Transformers;
 
-public class NeedleController : MonoBehaviour
-{
-    private bool isColliding = false;
-    public InputActionProperty pinchAction;
-    public Animator handAnimator;
-    private Rigidbody rb;
+namespace VREffusion {
+    public class NeedleController : MonoBehaviour {
+        private Rigidbody body;
+        private bool isColliding = false;
 
-
-    private void Start()
-    {
-        rb = GetComponent<Rigidbody>();
-        MeshCollider c;
-    }
-
-    private void FixedUpdate()
-    {
-        if (isColliding)
-        {
-            Vector3 vel = rb.velocity;
-            vel = transform.InverseTransformDirection(vel);
-            vel = vel.Multiply(Vector3.forward);
-            vel = transform.TransformDirection(vel);
-            rb.velocity = vel;
+        private void Start() {
+            body = GetComponent<Rigidbody>();
         }
-    }
 
-    private void OnCollisionEnter(Collision collision)
-    {
-        // N�r n�len treffer m�let, ignorer kollisjoner mellom n�len og m�let
-        if (collision.collider.CompareTag("Body"))
-        {
-            isColliding = true;
-            rb.constraints = RigidbodyConstraints.FreezeRotation;
-
+        private void LateUpdate() {
+            FixedUpdate();
         }
-    }
 
-    private void OnCollisionExit(Collision collision)
-    {
-        // N�r n�len forlater m�let, ikke lenger ignorer kollisjoner mellom n�len og m�let
-        if (collision.collider.CompareTag("Body"))
-        {
-            rb.constraints = RigidbodyConstraints.None;
-            isColliding = false;
+        private void FixedUpdate() {
+            if (isColliding) {
+                Vector3 delta = body.velocity;
+                delta = transform.InverseTransformDirection(delta);
+                delta = delta.Multiply(Vector3.forward);
+                delta = transform.TransformDirection(delta);
+                body.velocity = delta;
+            }
+        }
+
+        private void OnTriggerEnter(Collider collider) {
+            if (collider.CompareTag("Body")) {
+                isColliding = true;
+                body.constraints = RigidbodyConstraints.FreezeRotation;
+            }
+        }
+
+        private void OnTriggerExit(Collider collider) {
+            if (collider.CompareTag("Body")) {
+                body.constraints = RigidbodyConstraints.None;
+                isColliding = false;
+            }
         }
     }
 }

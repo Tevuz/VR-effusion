@@ -134,14 +134,14 @@ void MainPre(uint3 id : SV_DispatchThreadID) {
     Rand_Init(id, 1001);
 
     Material material = readMaterial(id.xy);
-    material.density *= 0.94 + Rand_Noise(id.xy * float2(165.0, 165.0) / float(WIDTH), 2, 1001) * 0.12;
-    material.density *= 0.94 + Rand_Noise(id.xy * float2(135.0, 135.0) / float(WIDTH), 2, 1002) * 0.12;
-    if (id.y < HEIGHT / 18 && material.density < 0.01) {
-        material.density = -0.4;
+    material.density *= 0.97 + Rand_Noise(id.xy * float2(165.0, 165.0) / float(WIDTH), 2, 1001) * 0.16;
+    material.density *= 0.97 + Rand_Noise(id.xy * float2(135.0, 135.0) / float(WIDTH), 2, 1002) * 0.16;
+    if (id.y < HEIGHT / 18 && material.density < 0.0001) {
+        material.density -= 0.1;
     } else {
     }
 
-    material.density += Rand_Float() * 0.05;
+    material.density += Rand_Float() * 0.008;
 
     writeMaterial(id.xy, material);
 }
@@ -244,15 +244,16 @@ void Raytrace(uint3 id) {
         d1 = material.density;
 
         float r = Reflectance(dir, nor, d1 + 1.0, d0 + 1.0);
-        if (Rand_Float() < 0.05 && Rand_Float() < r) {
+        if (Rand_Float() < 0.12 && Rand_Float() < r) {
             //buffer_output[src] += float4(0.0, delta, 0.0, 0.0);
-            float2 _dir = normalize(reflect(dir, nor) + Rand_Float2() * Rand_Float() * 0.05);
+            float2 _dir = normalize(reflect(dir, nor) + Rand_Float2() * Rand_Float() * 0.04);
             //float n = (d1 + 1.0) / (d0 + 1.0);
             if (dot(_dir, -step) < 0.0) {
                 src -= step;
                 d1 = d0;
             }
-            float a = abs(dot(dir, _dir));
+            //float a = abs(dot(dir, _dir));
+            float a = smoothstep(-0.5, 1.0, dot(dir, _dir));
             col = pow(a, 15.0);
 
             att *= 0.5 + 0.5 * a * a;
@@ -263,12 +264,13 @@ void Raytrace(uint3 id) {
             float n = (d1 + 1.0) / (d0 + 1.0);
             //col = max(n - 1.0, 1.0 / n - 1.0);
             //col = max(0.0, n - 1.0) * d1;
-            float2 _dir = normalize(dir - refract(dir, nor, 1.0 / n) * 0.3 + Rand_Float2() * Rand_Float() * 0.05);
+            float2 _dir = normalize(dir - refract(dir, nor, 1.0 / n) * 0.25 + Rand_Float2() * Rand_Float() * 0.04);
 
             col = smoothstep(0.0, 1.0, pow(abs(dot(-dir, nor)), 0.5)) * max(0.0, n - 1.0);
 
             att *= n;
-            float a = abs(dot(dir, _dir));
+            //float a = abs(dot(dir, _dir));
+            float a = smoothstep(-0.5, 1.0, dot(dir, _dir));
             att *= 0.5 + 0.5 * a * a;
             dir = _dir;
         }
@@ -310,7 +312,7 @@ void MainPost(uint3 id : SV_DispatchThreadID) {
 
     if (mode == 0) {
         float3 col = buffer_simulate[id.xy].r;
-        col = 1.0 - exp(col * -4.0 / float(SAMPLES));
+        col = 1.0 - exp(col * -6.0 / float(SAMPLES));
         col = pow(col, 0.45);
         col = col*col*(3.0-2.0*col);
 

@@ -4,88 +4,81 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-public class LineRendererSet : MonoBehaviour
-{
-    public GameObject panel;
-    public Image img;
-    public Button btn;
 
-    [SerializeField] LineRenderer lineRenderer;
+namespace VREffusion {
+    public class LineRendererSet : MonoBehaviour {
+        public GameObject panel;
+        public Image img;
+        public Button btn;
 
-    Vector3[] points;
+        [SerializeField] LineRenderer lineRenderer;
 
-    public LayerMask layerMask;
+        Vector3[] points;
 
-    // Start is called before the first frame update
-    void Start()
-    {
-        img = panel.GetComponent<Image>();
-        lineRenderer = gameObject.GetComponent<LineRenderer>();
+        public LayerMask layerMask;
 
-        points = new Vector3[2];
+        // Start is called before the first frame update
+        void Start() {
+            img = panel.GetComponent<Image>();
+            lineRenderer = gameObject.GetComponent<LineRenderer>();
 
-        points[1] = Vector3.zero;
+            points = new Vector3[2];
 
-        points[1] = transform.position + new Vector3(0, 0, 20);
+            points[1] = Vector3.zero;
 
-        lineRenderer.SetPositions(points);
-        lineRenderer.enabled = true;
-    }
+            points[1] = transform.position + new Vector3(0, 0, 20);
 
-    public bool AlignLineRenderer(LineRenderer renderer)
-    {
-        bool hitBtn = false;
-        Ray ray;
-        ray = new Ray(transform.position, transform.forward);
-        RaycastHit hit;
-
-
-        if (Physics.Raycast(ray, out hit, layerMask))
-        {
-
-
-            points[1] = transform.forward + new Vector3(0, 0, hit.distance);
-            btn = hit.collider.gameObject.GetComponent<Button>();
-
-            hitBtn = true;
-
-        }
-        else
-        {
-            points[1] = transform.forward + new Vector3(0, 0, 20);
+            lineRenderer.SetPositions(points);
+            lineRenderer.enabled = true;
         }
 
-        renderer.SetPositions(points);
-        return hitBtn;
-    }
+        public bool AlignLineRenderer(LineRenderer renderer) {
+            bool hitBtn = false;
+            Ray ray;
+            ray = new Ray(transform.position, transform.forward);
+            RaycastHit hit;
 
-    public TMP_Text feedbackText; // Dra Text UI-element hit i Inspector
 
-    // Denne metoden laster en scene basert på dens navn
-    public void LoadScene(string sceneName)
-    {
-        SceneManager.LoadScene(sceneName);
-    }
+            if (Physics.Raycast(ray, out hit, layerMask)) {
 
-    // Denne metoden viser en midlertidig tilbakemelding
-    public void ShowFeedback(string message)
-    {
-        StartCoroutine(ShowFeedbackCoroutine(message));
-    }
 
-    private IEnumerator ShowFeedbackCoroutine(string message)
-    {
-        feedbackText.text = message;
-        feedbackText.gameObject.SetActive(true);
-        yield return new WaitForSeconds(2); // Vent i 2 sekunder
-        feedbackText.gameObject.SetActive(false);
-    }
-    // Update is called once per frame
-    void Update()
-    {
-        if (AlignLineRenderer(lineRenderer) && Input.GetAxis("Submit") > 0)
-        {
-            btn.onClick.Invoke();
+                points[1] = transform.forward + new Vector3(0, 0, hit.distance);
+                btn = hit.collider.gameObject.GetComponent<Button>();
+
+                hitBtn = true;
+
+            } else {
+                points[1] = transform.forward + new Vector3(0, 0, 20);
+            }
+
+            renderer.SetPositions(points);
+            return hitBtn;
+        }
+
+        public TMP_Text feedbackText; // Dra Text UI-element hit i Inspector
+
+        // Denne metoden laster en scene basert pï¿½ dens navn
+        public void LoadScene(string sceneName) {
+            SceneManager.LoadScene(sceneName);
+        }
+
+        // Denne metoden viser en midlertidig tilbakemelding
+        public void ShowFeedback(string message) {
+            StartCoroutine(ShowFeedbackCoroutine(message));
+        }
+
+        private IEnumerator ShowFeedbackCoroutine(string message) {
+            feedbackText.text = message;
+            feedbackText.gameObject.SetActive(true);
+            yield return new WaitForSeconds(2); // Vent i 2 sekunder
+            feedbackText.gameObject.SetActive(false);
+        }
+
+        // Update is called once per frame
+        void Update() {
+            if (AlignLineRenderer(lineRenderer) && Input.GetAxis("Submit") > 0) {
+                btn.onClick.Invoke();
+            }
         }
     }
 }

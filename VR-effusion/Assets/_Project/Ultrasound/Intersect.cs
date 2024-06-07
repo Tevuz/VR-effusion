@@ -81,7 +81,7 @@ namespace Ultrasound{
             _mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
             _mesh.indexBufferTarget |= GraphicsBuffer.Target.Raw;
 
-            var a_material = new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UInt32, 3);
+            var a_material = new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UInt32, 4);
 
             _mesh.SetVertexBufferParams(UltrasoundSystem.MAX_VERTICES_OUT, new VertexAttributeDescriptor(VertexAttribute.Position), a_material);
             _mesh.SetIndexBufferParams(UltrasoundSystem.MAX_VERTICES_OUT, IndexFormat.UInt32);
@@ -243,6 +243,7 @@ namespace Ultrasound{
 
         private struct Material {
             internal int layer;
+            internal int back;
             internal float density;
             internal float attenuation;
         }

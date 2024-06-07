@@ -7,10 +7,11 @@ uint WIDTH;
 uint HEIGHT;
 uint FRAME;
 
-static uint SAMPLES = 60;
+static uint SAMPLES = 40;
 
 struct Material {
     int mask;
+    int back;
     float density;
     float attenuation;
 };
@@ -108,7 +109,7 @@ float Rand_Noise(float2 id, uint seed) {
 }
 
 float Rand_Noise(float2 id, uint octaves, uint seed) {
-    const float G = exp2(-1);
+    const float G = 0.95;//exp2(-0.1);
     float t = 0.0;
     float w = 1.0;
     for (uint i = 0; i < octaves; i++) {
@@ -134,7 +135,7 @@ void MainPre(uint3 id : SV_DispatchThreadID) {
     Rand_Init(id, 1001);
 
     Material material = readMaterial(id.xy);
-    material.density *= 1.0 + Rand_Noise(id.xy * float2(85.0, 85.0) / float(WIDTH), 3, 1001) * 0.075;
+    material.density *= 1.0 + Rand_Noise(id.xy * float2(55.0, 165.0) / float(WIDTH), 2, 1001) * 0.025;
     if (id.y < HEIGHT / 20) {
         material.density = 1.0;
     } else {
@@ -265,7 +266,7 @@ void Raytrace(uint3 id) {
             float n = (d1 + 1.0) / (d0 + 1.0);
             //col = max(n - 1.0, 1.0 / n - 1.0);
             //col = max(0.0, n - 1.0) * d1;
-            float2 _dir = normalize(dir - refract(dir, nor, 1.0 / n) * 0.25 + Rand_Float2() * Rand_Float() * 0.04);
+            float2 _dir = normalize(dir + refract(dir, nor, 1.0 / n) * 0.15 + Rand_Float2() * Rand_Float() * 0.04);
 
             col = smoothstep(0.0, 1.0, pow(abs(dot(-dir, nor)), 0.5)) * max(0.0, n - 1.0);
 
@@ -312,7 +313,7 @@ void MainPost(uint3 id : SV_DispatchThreadID) {
 
     if (mode == 0) {
         float3 col = buffer_simulate[id.xy].r;
-        col = 1.0 - exp(col * -3.0 / float(SAMPLES));
+        col = 1.0 - exp(col * -4.0 / float(SAMPLES));
         col = pow(col, 0.45);
         col = col*col*(3.0-2.0*col);
 
@@ -340,8 +341,10 @@ void MainNormal(uint3 id : SV_DispatchThreadID) {
     for (int y = 1-SIZE; y <= SIZE; y++) {
         for (int x = 1-SIZE; x <= SIZE; x++) {
             float2 c = float2(x, y) - 0.5;
-            nor.xy += getValue(int2(id.x + x, id.y + y)) * sign(c) * exp(-c.x * c.x * 0.75) * exp(-c.y * c.y * 0.75);
+            nor.xy += getValue(int2(id.x + x, id.y + y)) * sign(c) * exp(-c.x * c.x * 0.65) * exp(-c.y * c.y * 0.65);
         }
     }
-    buffer_normal[id.xy] = normalize(nor);
+    nor = normalize(nor);
+    nor /= nor.z;
+    buffer_normal[id.xy] = nor;
 }

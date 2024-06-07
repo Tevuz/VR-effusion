@@ -15,6 +15,7 @@ uint WIDTH, HEIGHT;
 
 struct Material {
     int mask;
+    int back;
     float density;
     float attenuation;
 };
@@ -44,8 +45,9 @@ uint _outStride;
 void writeVertex(uint i, float3 position, Material material) {
     _outVertices.Store3(i * _outStride +  0, asuint(position));
     _outVertices.Store (i * _outStride + 12, asuint(material.mask));
-    _outVertices.Store (i * _outStride + 16, asuint(material.density));
-    _outVertices.Store (i * _outStride + 20, asuint(material.attenuation));
+    _outVertices.Store (i * _outStride + 16, asuint(material.back));
+    _outVertices.Store (i * _outStride + 20, asuint(material.density));
+    _outVertices.Store (i * _outStride + 24, asuint(material.attenuation));
 }
 
 RWStructuredBuffer<Material> _outBuffer;
@@ -137,6 +139,8 @@ void Main(uint3 id : SV_DispatchThreadID) {
     float3 v1 = mul(modelView, float4(p1, 1.0)).xyz;
     float3 v2 = mul(modelView, float4(p2, 1.0)).xyz;
 
+    bool back = cross(v2 - v0, v1 - v0).z <= 0.0;
+
     //if (!onScreen(v0, v1, v2))
     //    return;
 
@@ -187,6 +191,7 @@ void Main(uint3 id : SV_DispatchThreadID) {
 
     Material material;
     material.mask = material_layer;
+    material.back = back ? material_layer : 0;
     material.density = material_density;
     material.attenuation = material_attenuation;
 
@@ -194,7 +199,7 @@ void Main(uint3 id : SV_DispatchThreadID) {
     writeVertex(c + 1, w1, material);
 }
 
-static const Material AIR = {0, 0.0, 0.01};
+static const Material AIR = {0, 0, 0.0, 0.01};
 static const float3 null = float3(0.0, 0.0, 0.0);
 
 [numthreads(64, 1, 1)]
@@ -233,9 +238,12 @@ void Raster(uint3 id : SV_DispatchThreadID) {
     int mask = asint(_outVertices.Load((c + 0) * _outStride + 12));
     mask = 1 << (mask - 1);
 
+    int back = asint(_outVertices.Load((c + 0) * _outStride + 16));
+    back = 1 << (back - 1);
+
     Material material;
-    material.density = asfloat(_outVertices.Load((c + 0) * _outStride + 16));
-    material.attenuation = asfloat(_outVertices.Load((c + 0) * _outStride + 20));
+    material.density = asfloat(_outVertices.Load((c + 0) * _outStride + 20));
+    material.attenuation = asfloat(_outVertices.Load((c + 0) * _outStride + 24));
 
     if (v1.x < v0.x) {
         int2 t = v0;
@@ -261,7 +269,8 @@ void Raster(uint3 id : SV_DispatchThreadID) {
         Material output;
         output.density = (current.mask > mask) ? current.density : material.density;
         output.attenuation = (current.mask > mask) ? current.attenuation : material.attenuation;
-        output.mask = current.mask ^ mask;
+        output.mask = current.mask | mask;
+        output.back = current.back | back;
 
         writeMaterial(int2(x, y), output);
     }
@@ -311,14 +320,15 @@ void Fill(uint3 id : SV_DispatchThreadID) {
 
 
         if (input.mask != 0) {
-            mask ^= input.mask;
-            int layer = indexOfMSB(mask);
+            mask |= input.mask;
+            mask &= ~input.back;
 
             bool entering = (mask & input.mask) != 0;
             if (entering) {
-                materials[layer] = input;
+                materials[indexOfMSB(input.mask)] = input;
             }
-            material = materials[layer];
+
+            material = materials[indexOfMSB(mask)];
         }
 
         writeMaterial(int2(id.x, y), material);

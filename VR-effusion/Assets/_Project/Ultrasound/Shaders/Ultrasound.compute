@@ -135,13 +135,13 @@ void MainPre(uint3 id : SV_DispatchThreadID) {
     Rand_Init(id, 1001);
 
     Material material = readMaterial(id.xy);
-    material.density *= 1.0 + Rand_Noise(id.xy * float2(55.0, 165.0) / float(WIDTH), 2, 1001) * 0.025;
+    material.density *= 1.0 + Rand_Noise(id.xy * float2(45.0, 135.0) / float(WIDTH), 3, 1001) * 0.045;
     if (id.y < HEIGHT / 20) {
         material.density = 1.0;
     } else {
     }
 
-    material.density += Rand_Float() * 0.015;
+    material.density += Rand_Float() * 0.0035;
 
     writeMaterial(id.xy, material);
 }

@@ -135,13 +135,13 @@ void MainPre(uint3 id : SV_DispatchThreadID) {
     Rand_Init(id, 1001);
 
     Material material = readMaterial(id.xy);
-    material.density *= 1.0 + Rand_Noise(id.xy * float2(45.0, 135.0) / float(WIDTH), 3, 1001) * 0.045;
+    material.density += Rand_Float() * 0.0005;
+
     if (id.y < HEIGHT / 20) {
         material.density = 1.0;
     } else {
+        material.density *= 1.0 + Rand_Noise(id.xy * float2(55.0, 135.0) / float(WIDTH), 3, 1001) * 0.85;
     }
-
-    material.density += Rand_Float() * 0.0035;
 
     writeMaterial(id.xy, material);
 }
@@ -281,11 +281,12 @@ void Raytrace(uint3 id) {
         dd = lerp(d1, dd, 0.75);
 
 
-
+#if DEBUG
         float tt = (FRAME * 4) % (HEIGHT * 2);
         float s = smoothstep(4.0, 0.0, tt - dst.y) * smoothstep(0.0, 0.1, tt - dst.y);
         buffer_post[src] += float4(delta * 0.2 * att, 0.0, 0.0, 0.0);
         buffer_post[src] += float4(0.0, 0.0, s, 0.0);
+#endif
 
         att *= 1.0 - material.attenuation * material.attenuation;
 
@@ -309,24 +310,18 @@ void MainSimulate(uint3 id : SV_DispatchThreadID) {
 
 [numthreads(8,8,1)]
 void MainPost(uint3 id : SV_DispatchThreadID) {
-    int mode = 0;
+#if DEBUG
+    float3 col = buffer_post[id.xy].rgb;
+    col.rg += col.b;
+    buffer_post[int2(id.xy)] = float4(1.0 - exp(-col * 8.5 / float(SAMPLES)), 1.0);
+#else
+    float3 col = buffer_simulate[id.xy].r;
+    col = 1.0 - exp(col * -4.0 / float(SAMPLES));
+    col = pow(col, 0.45);
+    col = col*col*(3.0-2.0*col);
 
-    if (mode == 0) {
-        float3 col = buffer_simulate[id.xy].r;
-        col = 1.0 - exp(col * -4.0 / float(SAMPLES));
-        col = pow(col, 0.45);
-        col = col*col*(3.0-2.0*col);
-
-        buffer_post[int2(id.x, HEIGHT - id.y - 1)] = float4(col, 1.0);
-    } else if (mode == 1) {
-        float3 col = buffer_post[id.xy].rgb;
-        col.rg += col.b;
-        buffer_post[int2(id.xy)] = float4(1.0 - exp(-col * 8.5 / float(SAMPLES)), 1.0);
-    } else {
-        //float c = smoothstep(-0.8, 1.0, Rand_Noise(id.xy * 0.015, 3, 0));
-        //buffer_output[id.xy] = float4(c, c, c, 1.0);
-        buffer_post[int2(id.x, HEIGHT - id.y - 1)] = float4(buffer_normal[id.xy].xyz * 0.5 + 0.5, 0.0);
-    }
+    buffer_post[int2(id.x, HEIGHT - id.y - 1)] = float4(col, 1.0);
+#endif
 }
 
 float getValue(int2 id) {

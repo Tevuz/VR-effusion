@@ -7,10 +7,11 @@ uint WIDTH;
 uint HEIGHT;
 uint FRAME;
 
-static uint SAMPLES = 50;
+static uint SAMPLES = 40;
 
 struct Material {
     int mask;
+    int back;
     float density;
     float attenuation;
 };
@@ -108,7 +109,7 @@ float Rand_Noise(float2 id, uint seed) {
 }
 
 float Rand_Noise(float2 id, uint octaves, uint seed) {
-    const float G = exp2(-1);
+    const float G = 0.95;//exp2(-0.1);
     float t = 0.0;
     float w = 1.0;
     for (uint i = 0; i < octaves; i++) {
@@ -134,14 +135,13 @@ void MainPre(uint3 id : SV_DispatchThreadID) {
     Rand_Init(id, 1001);
 
     Material material = readMaterial(id.xy);
-    material.density *= 0.97 + Rand_Noise(id.xy * float2(165.0, 165.0) / float(WIDTH), 2, 1001) * 0.16;
-    material.density *= 0.97 + Rand_Noise(id.xy * float2(135.0, 135.0) / float(WIDTH), 2, 1002) * 0.16;
-    if (id.y < HEIGHT / 18 && material.density < 0.0001) {
-        material.density -= 0.1;
-    } else {
-    }
+    material.density += Rand_Float() * 0.0005;
 
-    material.density += Rand_Float() * 0.008;
+    if (id.y < HEIGHT / 20) {
+        material.density = 1.0;
+    } else {
+        material.density *= 1.0 + Rand_Noise(id.xy * float2(55.0, 135.0) / float(WIDTH), 3, 1001) * 0.85;
+    }
 
     writeMaterial(id.xy, material);
 }
@@ -192,7 +192,7 @@ void DDA(in int2 src, in float2 pos, in float2 dir, out int2 step, out float del
 }
 
 void Raytrace(uint3 id) {
-    int2 src = uint2(id.x, 0.0);
+    int2 src = int2(id.x, 0.0);
     float2 dst = float2(id.x + 0.5, 0.0);
 
     //float d = 0.0;
@@ -203,7 +203,7 @@ void Raytrace(uint3 id) {
 
     float att = 1.0;
 
-    float d0 = 0.2;
+    float d0 = 1.0;
     float d1 = readMaterial(src).density;
     float dd = d1;
 
@@ -219,11 +219,11 @@ void Raytrace(uint3 id) {
 
         col = 0.0;
 
-        if (src.y < 0.0) {
+        /*if (src.y < 0.0) {
             src -= step;
             step = -step;
             dir = reflect(dir, step);
-        }
+        }*/
         if (any(src < 0.0) || any(src >= float2(WIDTH, HEIGHT)))
             break;
 
@@ -244,8 +244,10 @@ void Raytrace(uint3 id) {
         d1 = material.density;
 
         float r = Reflectance(dir, nor, d1 + 1.0, d0 + 1.0);
-        if (Rand_Float() < 0.12 && Rand_Float() < r) {
-            //buffer_output[src] += float4(0.0, delta, 0.0, 0.0);
+        r = smoothstep(0.0, 1.0, r);
+        //if (Rand_Float() < 0.05 && Rand_Float() < r) {
+        if (Rand_Float() < 0.25 * (1.0 + r) * r) {
+            //buffer_post[src] += float4(d1, 0.0, 0.0, 0.0);
             float2 _dir = normalize(reflect(dir, nor) + Rand_Float2() * Rand_Float() * 0.04);
             //float n = (d1 + 1.0) / (d0 + 1.0);
             if (dot(_dir, -step) < 0.0) {
@@ -256,7 +258,7 @@ void Raytrace(uint3 id) {
             float a = smoothstep(-0.5, 1.0, dot(dir, _dir));
             col = pow(a, 15.0);
 
-            att *= 0.5 + 0.5 * a * a;
+            //att *= 0.5 + 0.5 * a * a;
             dir = _dir;
 
 
@@ -264,14 +266,14 @@ void Raytrace(uint3 id) {
             float n = (d1 + 1.0) / (d0 + 1.0);
             //col = max(n - 1.0, 1.0 / n - 1.0);
             //col = max(0.0, n - 1.0) * d1;
-            float2 _dir = normalize(dir - refract(dir, nor, 1.0 / n) * 0.25 + Rand_Float2() * Rand_Float() * 0.04);
+            float2 _dir = normalize(dir + refract(dir, nor, 1.0 / n) * 0.15 + Rand_Float2() * Rand_Float() * 0.04);
 
             col = smoothstep(0.0, 1.0, pow(abs(dot(-dir, nor)), 0.5)) * max(0.0, n - 1.0);
 
-            att *= n;
+            //att *= n;
             //float a = abs(dot(dir, _dir));
             float a = smoothstep(-0.5, 1.0, dot(dir, _dir));
-            att *= 0.5 + 0.5 * a * a;
+            //att *= 0.5 + 0.5 * a * a;
             dir = _dir;
         }
 
@@ -279,17 +281,17 @@ void Raytrace(uint3 id) {
         dd = lerp(d1, dd, 0.75);
 
 
-        //float tt = (FRAME * 4) % (HEIGHT * 2);
-        //float s = smoothstep(4.0, 0.0, tt - d) * smoothstep(0.0, 0.0, tt - d);
-        //buffer_post[src] += float4(delta * 0.05, 0.0, 0.0, 0.0);
-        //buffer_post[src] += float4(0.0, 0.0, s, 0.0);
+#if DEBUG
+        float tt = (FRAME * 4) % (HEIGHT * 2);
+        float s = smoothstep(4.0, 0.0, tt - dst.y) * smoothstep(0.0, 0.1, tt - dst.y);
+        buffer_post[src] += float4(delta * 0.2 * att, 0.0, 0.0, 0.0);
+        buffer_post[src] += float4(0.0, 0.0, s, 0.0);
+#endif
 
         att *= 1.0 - material.attenuation * material.attenuation;
 
         buffer_simulate[dst] += att * delta * col;
 
-        //d += delta;
-        att -= delta * 0.0003;
         if (att < 0.001)
             break;
 
@@ -308,39 +310,36 @@ void MainSimulate(uint3 id : SV_DispatchThreadID) {
 
 [numthreads(8,8,1)]
 void MainPost(uint3 id : SV_DispatchThreadID) {
-    int mode = 0;
+#if DEBUG
+    float3 col = buffer_post[id.xy].rgb;
+    col.rg += col.b;
+    buffer_post[int2(id.xy)] = float4(1.0 - exp(-col * 8.5 / float(SAMPLES)), 1.0);
+#else
+    float3 col = buffer_simulate[id.xy].r;
+    col = 1.0 - exp(col * -4.0 / float(SAMPLES));
+    col = pow(col, 0.45);
+    col = col*col*(3.0-2.0*col);
 
-    if (mode == 0) {
-        float3 col = buffer_simulate[id.xy].r;
-        col = 1.0 - exp(col * -6.0 / float(SAMPLES));
-        col = pow(col, 0.45);
-        col = col*col*(3.0-2.0*col);
-
-        buffer_post[int2(id.x, HEIGHT - id.y - 1)] = float4(col, 1.0);
-    } else if (mode == 1) {
-        float3 col = buffer_post[id.xy].rgb;
-        col.rg += col.b;
-        buffer_post[int2(id.x, HEIGHT - id.y - 1)] = float4(1.0 - exp(-col * 15.5 / float(SAMPLES)), 1.0);
-    } else {
-        //float c = smoothstep(-0.8, 1.0, Rand_Noise(id.xy * 0.015, 3, 0));
-        //buffer_output[id.xy] = float4(c, c, c, 1.0);
-        buffer_post[int2(id.x, HEIGHT - id.y - 1)] = float4(buffer_normal[id.xy].xyz * 0.5 + 0.5, 0.0);
-    }
+    buffer_post[int2(id.x, HEIGHT - id.y - 1)] = float4(col, 1.0);
+#endif
 }
 
 float getValue(int2 id) {
     return readMaterial(clamp(id, 0, int2(WIDTH, HEIGHT) - 1)).density;
 }
 
+
 [numthreads(8,8,1)]
 void MainNormal(uint3 id : SV_DispatchThreadID) {
     float3 nor = float3(0.0, 0.0, 1.0);
-    const int SIZE = 3;
+    const int SIZE = 2;
     for (int y = 1-SIZE; y <= SIZE; y++) {
         for (int x = 1-SIZE; x <= SIZE; x++) {
             float2 c = float2(x, y) - 0.5;
-            nor.xy += getValue(int2(id.x + x, id.y + y)) * sign(c) * exp(-c.x * c.x * 0.75) * exp(-c.y * c.y * 0.75);
+            nor.xy += getValue(int2(id.x + x, id.y + y)) * sign(c) * exp(-c.x * c.x * 0.65) * exp(-c.y * c.y * 0.65);
         }
     }
-    buffer_normal[id.xy] = normalize(nor);
+    nor = normalize(nor);
+    nor /= nor.z;
+    buffer_normal[id.xy] = nor;
 }

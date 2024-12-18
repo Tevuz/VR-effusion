@@ -8,6 +8,8 @@ TagManager:
   - Left Hand
   - Needle
   - Body
+  - Ultrasoundprobe
+  - Syringe
   layers:
   - Default
   - TransparentFX
@@ -17,8 +19,8 @@ TagManager:
   - UI
   - Player
   - Interactable
-  - 
-  - 
+  - USM
+  - Patient
   - 
   - 
   - 

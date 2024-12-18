@@ -5,11 +5,14 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 0
+  - enabled: 1
     path: Assets/_Project/Scenes/1 Start Scene.unity
     guid: 108a4f75c8a669e4a95469ac24da9994
   - enabled: 1
     path: Assets/_Project/Scenes/2 Knee Scene.unity
+    guid: d1dcfaea7a2db534eaf1f96cc6ab4dcb
+  - enabled: 0
+    path: Assets/_Project/Scenes/12 Demo Knee Scene.unity
     guid: 64945fd2014c9ee4097ac2503493b015
   m_configObjects:
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 968b5ba7b14160844b155fd506321bd2, type: 2}
